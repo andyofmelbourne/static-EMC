@@ -32,8 +32,7 @@ class A():
         self.w = np.ones((D,), dtype = np.float32)
         self.b = np.ones((D, L), dtype = np.float32)
         self.W = np.ascontiguousarray(np.random.random((C, I)).astype(np.float32))
-        self.B = 1e-3 * np.ascontiguousarray(np.random.random((L, I)).astype(np.float32))
-        #self.B = np.ascontiguousarray(np.random.random((L, I)).astype(np.float32))
+        self.B = np.zeros((L, I), dtype = np.float32)
 
 def init(c):
     output = 'recon.pickle'
