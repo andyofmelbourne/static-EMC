@@ -4,6 +4,7 @@ import time
 
 import config as c
 
+
 def plot_iter(r, iteration = 0):
     """
     | P-matrix |
@@ -20,7 +21,7 @@ def plot_iter(r, iteration = 0):
     
     layout = """
         PPP012
-        lll345
+        PPP345
         www678
         abcfff
         LLLLLL
@@ -32,11 +33,28 @@ def plot_iter(r, iteration = 0):
     
     # P-matrix
     ax = ax_dict["P"]
-    im = ax.imshow(r.P.T**0.5, aspect='auto', origin='lower', interpolation='nearest')
-    ax.set_ylabel('class (t)')
-    ax.set_title('P-matrix')
+    #im = ax.imshow(r.P.T**0.5, aspect='auto', origin='lower', interpolation='nearest')
+    #ax.set_ylabel('class (t)')
+    #ax.set_title('P-matrix')
+    # assign colour (value) to each class in subset
+    print(iteration, len(r.most_likely_classes))
+    frames  = np.random.randint(0, r.D, size = min(256, r.D))
+    array   = np.zeros((iteration, frames.shape[0]), dtype=float)
+    array[-1, :] = np.linspace(0, 1, frames.shape[0])
+    for i in range(iteration-2, -1, -1):
+        a = r.most_likely_classes[i][frames]
+        b = r.most_likely_classes[i+1][frames]
+        for j in range(array.shape[1]):
+            if (a[j] - b[j]) != 0 :
+                array[i, j] = np.random.random()
+    im = ax.imshow(array.T, aspect = 'auto', origin='lower', interpolation='nearest')#, cmap = 'gist_ncar_r')
+    ax.set_ylabel('frame')
+    ax.set_xlabel('iteration')
+    ax.set_title('most likely class')
+    ax.set_xticks(range(iteration))
     
     # P-plots
+    """
     ax = ax_dict["l"]
     t_s = [0,1,9] 
     for t in t_s :
@@ -45,6 +63,7 @@ def plot_iter(r, iteration = 0):
     ax.legend()
     ax.spines[['right', 'top']].set_visible(False)
     ax.set_xlabel('frame number (d)')
+    """
 
     # w
     ax = ax_dict["w"]
@@ -114,12 +133,12 @@ def plot_iter(r, iteration = 0):
     ax = ax_dict["L"]
     ax.bar(np.arange(len(r.expectation_values)), r.expectation_values,  width = 1, align='edge', color='lightcoral', edgecolor='k', alpha=0.8, linewidth=1)
     ax.spines[['right', 'top']].set_visible(False)
-    ax.set_xlim([0, max(30, len(r.LL))])
+    ax.set_xlim([0, max(100, len(r.LL))])
     #ax.set_yscale('log')
     ax.set_title("expectation values")
     ax.set_xlabel("iterations")
     
-    plt.savefig(f'recon_{str(iteration).zfill(3)}.pdf')
+    plt.savefig(f'recon_{str(iteration-1).zfill(3)}.pdf')
     
     
 

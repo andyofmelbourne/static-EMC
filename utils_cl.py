@@ -121,7 +121,7 @@ def calculate_P(K, inds, w, W, b, B, LR, P, beta):
     LL = np.sum(LR)
     
     # E = sum_dt P[d, t] LR[d, t]
-    expectation = np.sum(P * LR)
+    expectation = np.sum(P * LR) / beta
     
     normalise_LR(LR, P)
     return LL, expectation

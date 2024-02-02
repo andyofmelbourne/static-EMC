@@ -18,6 +18,7 @@ class A():
         #self.indsT = indsT
         self.mask = mask
         
+        self.most_likely_classes = []
         self.LL = []
         self.expectation_values = []
         self.iterations = 0
