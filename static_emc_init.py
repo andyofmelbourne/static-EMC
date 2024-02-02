@@ -6,7 +6,7 @@ import pickle
 #np.random.seed(1)
 
 class A():
-    def __init__(self, C, L, D, I, K, inds, KT, indsT, mask, pixel_indices, beta):
+    def __init__(self, C, L, D, I, K, inds, mask, pixel_indices, beta):
         self.beta = beta
         self.C = C
         self.L = L
@@ -14,8 +14,8 @@ class A():
         self.I = I
         self.K = K
         self.inds = inds
-        self.KT = KT
-        self.indsT = indsT
+        #self.KT = KT
+        #self.indsT = indsT
         self.mask = mask
         
         self.LL = []
@@ -26,7 +26,7 @@ class A():
         
         self.LR = np.empty((D, C), dtype = np.float32)
         self.P  = np.zeros((D, C), dtype = np.float32)
-        self.PT = np.empty((C, D), dtype = np.float32)
+        #self.PT = np.empty((C, D), dtype = np.float32)
         
         self.w = np.ones((D,), dtype = np.float32)
         self.b = np.ones((D, L), dtype = np.float32)
@@ -69,6 +69,7 @@ def init(c):
             K.append(frame[m].copy())
             inds.append(inds_f[m].copy())
         
+    """
     # load transposed data into sparse array
     KT    = []
     indsT = []
@@ -88,10 +89,11 @@ def init(c):
             m = frame > 0 
             KT.append(frame[m])
             indsT.append(inds_d[m])
+    """
     
     print(f'Found {D} frames with {I} unmasked pixels')
             
-    a = A(c.classes, c.background_classes, D, I, K, inds, KT, indsT, mask, pixel_indices, c.beta)
+    a = A(c.classes, c.background_classes, D, I, K, inds, mask, pixel_indices, c.beta)
     
     # save sparse datasets        
     print('saving reconstruction variables to:', output)

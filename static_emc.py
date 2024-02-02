@@ -37,15 +37,15 @@ LR = a.LR
 P = a.P
 
 # transpose of above  PT[c, d]
-PT = a.PT
+#PT = a.PT
 
 # photon counts K[d, i]
 K = a.K
 inds = a.inds
 
 # transpose of above KT[i, d]
-KT = a.KT
-indsT = a.indsT
+#KT = a.KT
+#indsT = a.indsT
 
 print('classes:', W.shape[0])
 print('frames:', len(K))

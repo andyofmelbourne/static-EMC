@@ -177,7 +177,7 @@ def update_W(P, w, W, K, inds, b, B, tol_P = 1e-2, minval = 1e-10, update_B = Tr
     print('\nW-update')
     print('chunks:', chunks)
     
-    pixels = np.int32(1024) 
+    pixels = np.int32(256) 
     
     # calculate g0
     P_cl = cl.array.empty(queue, (D * C,), dtype = np.float32)
