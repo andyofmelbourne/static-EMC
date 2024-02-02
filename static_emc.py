@@ -57,6 +57,8 @@ print('iterations:', a.iterations)
 
 #for i in range(c.iters):
 for i in range(3):
+    # this effectively sets the baseline background scale to 1
+    # since b is intitialised to 1
     if r.iterations == 0 :
         update_b = False
     else :
