@@ -47,6 +47,8 @@ def plot_iter(r, iteration = 0):
         for j in range(array.shape[1]):
             if (a[j] - b[j]) != 0 :
                 array[i, j] = np.random.random()
+            else :
+                array[i, j] = array[i+1, j]
     im = ax.imshow(array.T, aspect = 'auto', origin='lower', interpolation='nearest')#, cmap = 'gist_ncar_r')
     ax.set_ylabel('frame')
     ax.set_xlabel('iteration')
