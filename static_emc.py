@@ -56,10 +56,10 @@ beta = 0.002
 print('iterations:', a.iterations)
 
 #for i in range(c.iters):
-for i in range(3):
+for i in range(1):
     # this effectively sets the baseline background scale to 1
     # since b is intitialised to 1
-    if r.iterations == 0 :
+    if a.iterations == 0 :
         update_b = False
     else :
         update_b = True
@@ -75,8 +75,8 @@ for i in range(3):
     a.LL.append(LL)
     a.expectation_values.append(E)
     a.iterations += 1
-    utils.plot_iter(a, a.iterations)
-    os.system("pdfunite recon_*.pdf recon.pdf")
+    #utils.plot_iter(a, a.iterations)
+    #os.system("pdfunite recon_*.pdf recon.pdf")
     
     # save state
-    #pickle.dump(a, open('recon.pickle', 'wb'))
+    pickle.dump(a, open('recon.pickle', 'wb'))
