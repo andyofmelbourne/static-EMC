@@ -312,97 +312,52 @@ def update_w(P, w, W, b, B, K, inds, tol_P = 1e-3, tol = 1e-5, min_val = 1e-10, 
     I = np.int32(W.shape[1])
     D = np.int32(w.shape[0])
     L = np.int32(B.shape[0])
-        
-    minval = np.float32(min_val)
-    
-    # chunk over data
-    frames = np.int32(2048)
-    
-    P_cl = cl.array.empty(queue, (frames * C,), dtype = np.float32)
-    w_cl  = cl.array.empty(queue, (frames,), dtype = np.float32)
-    K_cl  = cl.array.empty(queue, (frames * I,), dtype = np.uint8)
-    ds_cl = cl.array.empty(queue, (C, frames,), dtype = np.int32)
-    Ds_cl = cl.array.empty(queue, (C,), dtype = np.int32)
-    W_cl  = cl.array.empty(queue, (C * I,), dtype = np.float32)
-    B_cl  = cl.array.empty(queue, (L * I,), dtype = np.float32)
-    b_cl  = cl.array.empty(queue, (L * frames,), dtype = np.float32)
-    
-    ts_cl         = cl.array.empty(queue, (frames * C,), dtype = np.int32)
-    Ts_cl         = cl.array.empty(queue, (frames,),     dtype = np.int32)
-    Wsums_cl      = cl.array.empty(queue, (C,), dtype = np.float32)
-    gw_cl         = cl.array.empty(queue, (frames,), dtype = np.float32)
-    gb_cl         = cl.array.empty(queue, (L,), dtype = np.float32)
-    background_cl = cl.array.empty(queue, (frames * I,), dtype = np.float32)
-    
-    K_dense = np.zeros((I, frames), dtype = np.uint8)
-    
-    # needs to be updated for chunking
-    # for now this is just the entire dataset
 
-    # calculate gradient offsets 
-    # Wt[t] = sum_i W[t, i]
-    cl.enqueue_copy(queue, W_cl.data, np.ascontiguousarray(W.T))
-    cl.enqueue_copy(queue, B_cl.data, np.ascontiguousarray(B.T))
-    cl_code.calculate_Wt2(queue, (C,), None,
-        W_cl.data, Wsums_cl.data, I, C)
-        
-    ts = np.zeros((frames, C), dtype = np.int32)
-    Ts = np.zeros((frames,), dtype = np.int32)
+    # each rank processes a sub-set of frames
+    my_frames = list(range(rank, C, size))
     
-    for dstart, dstop, dd in tqdm(chunk_csize(D, frames), desc = 'updating fluence estimates'):
-        for i in tqdm(range(1), desc='setup', leave=False):
-            K_dense.fill(0)
-            for d in range(dstart, dstop):
-                K_dense[inds[d], d - dstart] = K[d]
-            cl.enqueue_copy(queue, K_cl.data, K_dense)
+    if rank == 0 :
+        print('\nupdating fluence estimates')
+        disable = False
+    else :
+        disable = True
 
-            cl.enqueue_copy(queue, P_cl.data, P[dstart: dstop])
-            cl.enqueue_copy(queue, w_cl.data, w[dstart: dstop])
-            cl.enqueue_copy(queue, b_cl.data, b[dstart: dstop])
+    Wsums = np.sum(W[my_frames, :], axis=-1)
+    g0    = np.dot(Wsums, P[my_frames, :])
+    Ksums = np.array([np.sum(K[d]) for d in my_frames])
+    xmax  = Ksums / g0
+    
+    for d in tqdm(my_frames, desc = 'processing frame', disable = disable):
+        p = P[d] 
+        classes    = np.where(p > (p.max() * tol_P))[0]
+        background = np.dot(b[d], B)
+        t, i = np.ix_(classes, inds[d])
+        Wti  = np.ascontiguousarray(W[t, i])
+        Bi   = np.ascontiguousarray(background[i])
+        Pt   = np.ascontiguousarray(P[d][t])
+        PK   = np.ascontiguousarray(Pt * K[d])
+        x    = np.clip(w[d], min_val, xmax[d])
+        c    = g0[d]
+    
+        
+        for iter in range(3):
+            T = x + Bi / Wti
+            f =  np.sum(PK / T)
+            g = -np.sum(PK / T**2)
              
-            # g0[d] = sum_t P[d, t] sum_i W[t, i]
-            cl_code.calculate_gw(queue, (dd,), None,
-                P_cl.data, Wsums_cl.data, gw_cl.data, C)
-            
-            # make lookup table for significant classes as a function of frame id
-            # ts[d, n] = n'th significant class id (t)
-            # Ts[d]    = number of significant classes
-            ts.fill(0)
-            Ts.fill(0)
-            # generate the frame lookup table 
-            for d in range(dd):
-                # good frame P[d, t] > Pmax[t]
-                p = P[dstart + d] 
-                t = np.where(p > (p.max() * tol_P))[0]
-                ts[d, :t.shape[0]] = t
-                Ts[d] = t.shape[0]
-                #print(dstart + d, t)
-            
-            cl.enqueue_copy(queue, ts_cl.data, ts)
-            cl.enqueue_copy(queue, Ts_cl.data, Ts)
-            
-            # background[i, d] = sum_l b[d, l] B[l, i]
-            cl_code.calculate_background_id(queue, (dd, I), None,
-                B_cl.data, b_cl.data, background_cl.data, L, I, frames)
-         
-        cl_code.update_w(queue, (dd,), None, 
-            P_cl.data, K_cl.data, background_cl.data, 
-            W_cl.data, w_cl.data, Ts_cl.data, ts_cl.data,
-            gw_cl.data, minval, I, C, frames)
+            u  = - f * f / g 
+            v  = - f / g - x 
+            xp = u / c - v 
+             
+            x = np.clip(xp, min_val, xmax[d]) 
         
-        cl.enqueue_copy(queue, w[dstart:dstop], w_cl.data)
+        w[d] = x;
     
-        if update_b :
-            for i in tqdm(range(1), desc = 'updating background weights'):
-                # gb[l] = sum_i B[i, l]
-                cl_code.calculate_gb(queue, (L,), None,
-                    B_cl.data, gb_cl.data, I, L)
-                
-                cl_code.update_b(queue, (dd, L), None, 
-                    P_cl.data, K_cl.data, background_cl.data, 
-                    W_cl.data, w_cl.data, B_cl.data, b_cl.data, Ts_cl.data, ts_cl.data,
-                    gb_cl.data, minval, I, C, frames, L)
-                
-                cl.enqueue_copy(queue, b[dstart:dstop], b_cl.data)
+    # all gather
+    w_all = np.empty_like(w)
+    for r in range(rank):
+        rank_frames = list(range(rank, C, size))
+        w_all[rank_frames] = comm.bcast(w[rank_frames], root=rank)
+    w[:] = w_all
 
 
