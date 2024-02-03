@@ -1,7 +1,10 @@
 
-// one worker per (class t, frame d) index
-// LR[d, t]   = sum_i (K[i, d] log(T[i, d, t]) - T[i, d, t])
-// T[i, d, t] = w[d] W[i, t] + sum_l b[d, l] B[i, l]
+// this is called once for each class and frame sub-set
+// one worker per frame
+
+// LR[d]   = sum_i (K[i, d] log(T[i, d]) - T[i, d])
+// T[i, d] = w[d] W[i] + sum_l b[d, l] B[l, i]
+
 kernel void calculate_LR_T_dt (
 global float *LR,  
 global unsigned char *K,  
@@ -12,35 +15,31 @@ global float *B,
 const float beta, 
 const int L, 
 const int I, 
-const int D,
-const int C)
+const int D)
 {   
 int d = get_global_id(0);
-int t = get_global_id(1);
 
 float T;
 float LR_local = 0. ;
 
 float wd = w[d];
 
-int i,l;
+int i, l;
 
 for (i=0; i<I; i++){
     // calculate T
-    T = wd * W[C*i + t] ;
-    //T = wd * W[I*t + i] ;
+    T = wd * W[i] ;
     
     // add background
     for (l=0; l<L; l++) 
-        T += b[d * L + l] * B[L*i + l];
-        //T += b[d * L + l] * B[I*l + i];
+        T += b[d * L + l] * B[I*l + i];
     
     LR_local += K[D*i + d] * log(T) - T;
 }
 
 LR_local *= beta ;
 
-LR[d * C + t] += LR_local ;
+LR[d] = LR_local ;
 }
 
 

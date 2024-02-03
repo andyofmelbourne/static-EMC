@@ -3,6 +3,11 @@ import pyopencl as cl
 import pyopencl.array 
 from tqdm import tqdm
 
+from mpi4py import MPI
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
+
 gpu_precision = np.float32
 
 # find an opencl device (preferably a GPU) in one of the available platforms
@@ -56,10 +61,16 @@ class chunk_csize:
 
     def __len__(self):
         return self.chunks
-        
+
         
 
 def calculate_LR(K, inds, w, W, b, B, LR, beta, min_val = 1e-10):
+    """
+    each rank processes all frames for a given set of classes
+    LR[d, t] = sum_i K[d, i] log( T[t, d, i] ) - T[t, d, i]
+    tranpose for faster summing
+    LR[d, t] = sum_i K[i, d] log( T[i, t, d] ) - T[i, t, d]
+    """
     D = np.int32(w.shape[0])
     C = np.int32(W.shape[0])
     L = np.int32(b.shape[1])
@@ -68,54 +79,66 @@ def calculate_LR(K, inds, w, W, b, B, LR, beta, min_val = 1e-10):
     beta = np.float32(beta)
     print('\nProbability matrix calculation')
     
-    # chunk over pixels
-    max_bytes = 10 * 1024**3 
-    bytes = (D * C + D + C * I + D * L + L * I + D * I) * 4  + D * I * 1
-    # needed pixel chunks
-    chunks = int(np.ceil(bytes / max_bytes))
-    print('GPU memory required for full matrices:', round(bytes / 1024**3, 1), 'GB')
-    print('chunks:', chunks)
+    # split classes by rank
+    my_classes = list(range(rank, C, size))
+    classes    = np.int32(len(my_classes))
+    
+    # parallelise over d chunks on gpu
+    frames = np.int32(1024)
+    
+    LR_cl = cl.array.zeros(queue, (frames,), dtype = np.float32)
+    w_cl  = cl.array.empty(queue, (frames,), dtype = np.float32)
+    W_cl  = cl.array.empty(queue, (I,),      dtype = np.float32)
+    b_cl  = cl.array.empty(queue, (frames, L),       dtype = np.float32)
+    B_cl  = cl.array.empty(queue, (L, I),            dtype = np.float32)
+    K_cl  = cl.array.empty(queue, (I, frames),       dtype = np.uint8)
+    
+    K_dense = np.zeros((I, frames), dtype = np.uint8)
 
-    pixels = np.int32(1024)
+    LR_buf = np.empty((frames,), dtype = np.float32)
     
-    LR_cl = cl.array.zeros(queue, (D, C), dtype = np.float32)
-    w_cl  = cl.array.empty(queue, (D,),   dtype = np.float32)
-    W_cl  = cl.array.empty(queue, (pixels, C), dtype = np.float32)
-    b_cl  = cl.array.empty(queue, (D, L), dtype = np.float32)
-    B_cl  = cl.array.empty(queue, (pixels, L), dtype = np.float32)
-    K_cl  = cl.array.empty(queue, (pixels, D), dtype = np.uint8)
-    
-    K_dense = np.zeros((pixels, D), dtype = np.uint8)
+    if rank == 0 :
+        disable = False
+    else :
+        disable = True
 
-    cl.enqueue_copy(queue, w_cl.data, w)
-    cl.enqueue_copy(queue, b_cl.data, b)
-    
-    for istart, istop, di in tqdm(chunk_csize(I, pixels), desc='calculating probability matrix'):
-        # load photons to gpu 
-        K_dense.fill(0)
-        for d in range(D):
-            m = (inds[d] >= istart) * (inds[d] < istop)
-            K_dense[inds[d][m] - istart, d] = K[d][m]
-        cl.enqueue_copy(queue, K_cl.data, K_dense)
-        
-        cl.enqueue_copy(queue, W_cl.data, np.ascontiguousarray(W[:, istart:istop].T))
-        cl.enqueue_copy(queue, B_cl.data, np.ascontiguousarray(B[:, istart:istop].T))
+    # loop over classes
+    for c in tqdm(my_classes, desc='processing class', disable = disable):
+        cl.enqueue_copy(queue, W_cl.data, W[c])
+        cl.enqueue_copy(queue, B_cl.data, B)
             
-        cl_code.calculate_LR_T_dt(queue, (D, C), None, 
-                LR_cl.data,  K_cl.data, w_cl.data, W_cl.data,
-                b_cl.data, B_cl.data, beta, L, di, D, C)
-        
-    cl.enqueue_copy(queue, LR, LR_cl.data)
+        for dstart, dstop, dd in tqdm(chunk_csize(D, frames), desc = 'processing frames', leave = False, disable = disable):
+            # load transposed photons to gpu 
+            K_dense.fill(0)
+            for d in range(dstart, dstop):
+                K_dense[inds[d], d] = K[d]
+            cl.enqueue_copy(queue, K_cl.data, K_dense)
+            
+            # load class etc. to gpu
+            cl.enqueue_copy(queue, w_cl.data, w[dstart:dstop])
+            cl.enqueue_copy(queue, b_cl.data, b[dstart:dstop])
+            
+            cl_code.calculate_LR_T_dt(queue, (dd,), None, 
+                    LR_cl.data,  K_cl.data, w_cl.data, W_cl.data,
+                    b_cl.data, B_cl.data, beta, L, I, frames)
+            
+            cl.enqueue_copy(queue, LR_buf, LR_cl.data)
+            LR[dstart: dstop, c] = LR_buf[:dd]
     
 def calculate_expectation(K, inds, w, W, b, B, LR, P, beta):
     calculate_LR(K, inds, w, W, b, B, LR, beta)
-
+    
     # E = sum_dt P[d, t] LR[d, t]
     expectation = np.sum(P * LR)
     return expectation
 
 def calculate_P(K, inds, w, W, b, B, LR, P, beta):
+    LR.fill(0)
     calculate_LR(K, inds, w, W, b, B, LR, beta)
+
+    x = np.zeros_like(LR)
+    comm.Allreduce(LR, x, op = MPI.SUM)
+    LR[:] = x
     
     # calculate log-likelihood before normalisation
     LL = np.sum(LR)
