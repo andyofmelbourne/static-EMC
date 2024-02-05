@@ -388,12 +388,87 @@ for (d = 0; d < D; d++){
 g_l[l] = c;
 }
 
+// grad[i] = sum_dt P[d, t] K[d, i] / ( B[i] + (w[d] W[t, i] + sum_l'neql b[d, l'] B[l', i]) / b[d]) - g0[l]
+// xmax[i] = sum_dt P[d, t] K[d, i] / g0[l]
+//         = sum_d K[d, i] / g0[l]
+
+kernel void update_B(
+global float *P,  
+global unsigned char *K,  
+global int *ds,  
+global int *Ds,  
+global float *g_l,  
+global float *B,  
+global float *b,  
+global float *W,  
+global float *w,  
+const float minval,
+const int L,
+const int I,
+const int C,
+const int D
+){
+
+int l = get_global_id(0);
+int i = get_global_id(1);
+
+int d, n, t, lp, iters;
+float f, g, T, PK, u, v, xp;
+
+float x      = B[I * l + i];
+
+float c = g_l[t] ;
+
+// calculate xmax 
+float maxval = 0.;
+for (d = 0; d < D; d++){ 
+    maxval += K[I * d + i] / c ;
+}
+
+x = clamp(x, minval, maxval);
+
+// optimisation loop 3x 
+for (iters = 0; iters < 3; iters++){
+    // calculate f and g in this notation
+    f = 0.;
+    g = 0.;
+    // grad[l, i] =  sum_t sum_d K[d, i] P[d, t] / ( B[i] + (w[d] W[t, i] + sum_l'neql b[d, l'] B[l', i]) / b[d]) - g0[l]
+    for (t = 0; t < C; t++){ 
+    for (n = 0; n < Ds[t]; n++){ 
+        // get the n'th relevant frame index for this class
+        d = ds[D * t + n] ;
+        T = 0.;
+        for (lp = 0; lp < L; lp++) {
+            if (lp != l) 
+                T += b[L*d + lp] * B[I * lp + i] ;
+        }
+         
+        T  += w[d] * W[I * t + i] ;
+        T = x + T / b[L * d + l]  ;
+        T  = max(T, minval);
+        PK = P[C * d + t] * K[I * d + i];
+        f += PK / T ;
+        g -= PK / (T * T) ;
+    }}
+    //printf("%.2e %.2e %.2e\n", x, c, f);
+    
+    u  = - f * f / g ;
+    v  = - f / g - x ;
+    xp = u / c - v ;
+    
+    x = clamp(xp, minval, maxval) ;
+}
+
+B[I * l + i] = x;
+
+}
+
 
 // grad[l, i] = sum_dt P[d, t] K[d, i] / ( B[i] + (w[d] W[t, i] + sum_l'neql b[d, l'] B[l', i]) / b[d]) - g0[l]
 // xmax[l, i] = sum_dt P[d, t] K[d, i] / g0[l]
 //            = sum_d K[d, i] / g0[l]
 
-kernel void update_B(
+kernel void update_B_old(
 global float *P,  
 global unsigned char *K,  
 global int *ds,  

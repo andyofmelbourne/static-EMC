@@ -191,8 +191,7 @@ def update_W(P, w, W, K, inds, b, B, tol_P = 1e-2, minval = 1e-10, update_B = Tr
         
     minval = np.float32(minval)
      
-    if rank == 0 :
-        print('\nW-update')
+    if rank == 0 : print('\nW-update')
     
     my_classes = list(range(rank, C, size))
     
@@ -249,11 +248,93 @@ def update_W(P, w, W, K, inds, b, B, tol_P = 1e-2, minval = 1e-10, update_B = Tr
                     w_cl.data, W_cl.data, gW, minval, I, L, Dc)
         
         cl.enqueue_copy(queue, W[c], W_cl.data)
-    
+
+    # all gather
     for r in range(size):
         rank_classes = list(range(r, C, size))
         W[rank_classes] = comm.bcast(W[rank_classes], root=r)
+
+def update_B(P, w, W, K, inds, b, B, tol_P = 1e-2, minval = 1e-10, update_B = True):
+    """
+    grad[l, i] = sum_dt P[d, t] b[d, l] (K[d, i] / T[l, d, t, i] - 1)
+               = sum_dt P[d, t] b[d, l] K[d, i] / T[l, d, t, i] - sum_dt P[d, t] b[d, l]
+               = sum_dt P[d, t] b[d, l] K[d, i] / (w[d] W[t, i] + sum_l b[d, l] B[l, i]) - sum_d b[d, l]
+               = sum_dt P[d, t] b[d, l] K[d, i] / (b[d] B[i] + w[d] W[t, i] + sum_l'neql b[d, l'] B[l', i]) - g0[l]
+               = sum_dt P[d, t] K[d, i] / ( B[i] + (w[d] W[t, i] + sum_l'neql b[d, l'] B[l', i]) / b[d]) - g0[l]
     
+    g0[l] = sum_t (sum_d P[t, d] b[d, l])
+    """
+    C = np.int32(W.shape[0])
+    I = np.int32(W.shape[1])
+    D = np.int32(w.shape[0])
+    L = np.int32(B.shape[0])
+    
+    if rank == 0 : print('\nB-update')
+
+    my_classes = list(range(rank, L, size))
+    
+    if rank == 0 :
+        disable = False
+    else :
+        disable = True
+
+    # calculate xmax[l, i] = sum_dt P[d, t] K[d, i] / sum_dt P[d, t] b[d, l]
+    #                      = sum_d K[d, i] / sum_d b[d, l]
+    
+    Ksums = np.zeros((I,), dtype = int)
+    for d in range(D):
+        Ksums[inds[d]] += K[d]
+    
+    bsums = np.sum(b, axis = 0)
+    
+    g = np.empty((I,), dtype = float)
+    f = np.empty((I,), dtype = float)
+    for l in tqdm(my_classes, desc = 'processing class', disable = disable):
+        # xmax[i]
+        xmax = Ksums / bsums[l]
+        
+        x  = B[l].copy()
+        c  = bsums[l]
+        
+        ls = [ll for ll in range(L) if ll != l]
+        b2 = b[:, ls] 
+        B2 = B[ls] 
+
+        for iter in range(3):
+            g.fill(0)
+            f.fill(0)
+            # sum over d to calculate g and f
+            for d in range(D):
+                p  = P[d] 
+                ts = np.where(p > (p.max() * tol_P))[0]
+                t, i = np.ix_(ts, inds[d])
+                
+                # could gpu accellerate this, but is it worth it?
+                # could be, since there may be a lot of t's
+                # but I don't plan to update B for large datasets
+                if L > 1 :
+                    T  = x[i] + (w[d] * W[t, i] + np.dot(b2[d], B2[i])) / b[d, l]
+                else :
+                    T  = x[i] + (w[d] * W[t, i]) / b[d, l]
+                
+                PK = P[d, t] * K[d]
+                
+                f[i]  += np.sum(PK / T,    axis=0)
+                g[i]  -= np.sum(PK / T**2, axis=0)
+            
+            u  = - f * f / g 
+            v  = - f / g - x 
+            xp = u / c - v 
+             
+            x = np.clip(xp, minval, xmax) 
+        
+        B[l] = x
+    
+    # all gather
+    for r in range(size):
+        rank_classes = list(range(r, L, size))
+        B[rank_classes] = comm.bcast(B[rank_classes], root=r)
+            
 
 def update_W_old():    
     # calculate g0
@@ -323,7 +404,7 @@ def update_W_old():
         
         cl.enqueue_copy(queue, W_buf, W_cl.data)
         W[:, istart:istop] = W_buf[:, :di]
-
+        
         # now that P and K are on the gpu may as well update background
         if update_B :
             cl_code.update_B(queue, (L, di), None, 
@@ -337,15 +418,6 @@ def update_W_old():
     W[:] = np.clip(W, minval, None)
     B[:] = np.clip(B, minval, None)
     
-    """
-    grad[l, i] = sum_dt P[d, t] b[d, l] (K[d, i] / T[l, d, t, i] - 1)
-               = sum_dt P[d, t] b[d, l] K[d, i] / T[l, d, t, i] - sum_dt P[d, t] b[d, l]
-               = sum_dt P[d, t] b[d, l] K[d, i] / (w[d] W[t, i] + sum_l b[d, l] B[l, i]) - sum_d b[d, l]
-               = sum_dt P[d, t] b[d, l] K[d, i] / (b[d] B[i] + w[d] W[t, i] + sum_l'neql b[d, l'] B[l', i]) - g0[l]
-               = sum_dt P[d, t] K[d, i] / ( B[i] + (w[d] W[t, i] + sum_l'neql b[d, l'] B[l', i]) / b[d]) - g0[l]
-
-    g0[l] = sum_t (sum_d P[t, d] b[d, l])
-    """
 
 def update_w(P, w, W, b, B, K, inds, tol_P = 1e-3, tol = 1e-5, min_val = 1e-10, max_iters=1000, update_b = True):
     """
@@ -415,8 +487,11 @@ def update_w(P, w, W, b, B, K, inds, tol_P = 1e-3, tol = 1e-5, min_val = 1e-10, 
             for l in range(L):
                 ls = [ll for ll in range(L) if ll != l]
                 c = gb0[l]
-                x = np.clip(b[d, l], min_val, xmax_b[d, l])
-                B2i = (w[d] * Wti + np.dot(b[d, ls], B[ls, i])) / B[l, i]
+                x = np.clip(b[d, l], min_val, xmax_b[j, l])
+                if L > 1 :
+                    B2i = (w[d] * Wti + np.dot(b[d, ls], B[ls, i])) / B[l, i]
+                else :
+                    B2i = w[d] * Wti / B[l, i]
                   
                 for iter in range(5):
                     T = x + B2i 
@@ -427,24 +502,16 @@ def update_w(P, w, W, b, B, K, inds, tol_P = 1e-3, tol = 1e-5, min_val = 1e-10, 
                     v  = - f / g - x 
                     xp = u / c - v 
                      
-                    x = np.clip(xp, min_val, xmax_b[d, l]) 
+                    x = np.clip(xp, min_val, xmax_b[j, l]) 
                 
                 b[d, l] = x;
         
     # all gather
-    w_all = np.empty_like(w)
     for r in range(size):
         rank_frames = list(range(r, D, size))
-        w_all[rank_frames] = comm.bcast(w[rank_frames], root=r)
-    w[:] = w_all
+        w[rank_frames] = comm.bcast(w[rank_frames], root=r)
     
-    # all gather
-    if update_b :
-        b_all = np.empty_like(w)
-        for r in range(size):
-            rank_frames = list(range(r, D, size))
-            b_all[rank_frames, :] = comm.bcast(b[rank_frames, :], root=r)
-        b[:] = b_all
+        if update_b : b[rank_frames, :] = comm.bcast(b[rank_frames, :], root=r)
     
 
 

@@ -63,7 +63,7 @@ beta = 0.002
 
 
 #for i in range(c.iters):
-for i in range(1):
+for i in range(2):
     # this effectively sets the baseline background scale to 1
     # since b is intitialised to 1
     #if a.iterations == 0 :
@@ -77,12 +77,14 @@ for i in range(1):
     utils_cl.update_w(P, w, W, b, B, K, inds, tol_P = 1e-3, tol = 1e-5, min_val = 1e-3, update_b = update_b)
     
     utils_cl.update_W(P, w, W, K, inds, b, B, tol_P = 1e-3, update_B = True)
+
+    utils_cl.update_B(P, w, W, K, inds, b, B, tol_P = 1e-2, minval = 1e-10, update_B = True)
     
     # keep track of log-likelihood values
-    #a.most_likely_classes.append(np.argmax(P, axis=1))
-    #a.LL.append(LL)
-    #a.expectation_values.append(E)
-    #a.iterations += 1
+    a.most_likely_classes.append(np.argmax(P, axis=1))
+    a.LL.append(LL)
+    a.expectation_values.append(E)
+    a.iterations += 1
     #utils.plot_iter(a, a.iterations)
     #os.system("pdfunite recon_*.pdf recon.pdf")
     
