@@ -65,17 +65,14 @@ for i in range(c.iters):
     update_B = c.update_B[i]
     tol_P = c.tol_P
     
-    #LL, E = utils_cl.calculate_P(K, inds, w, W, b, B, LR, P, beta)
-    LL = a.LL[-1]
-    E  = a.expectation_values[-1]
+    LL, E = utils_cl.calculate_P(K, inds, w, W, b, B, LR, P, beta)
     
     utils_cl.update_w(P, w, W, b, B, K, inds, tol_P = tol_P, min_val = 1e-3, update_b = update_b)
     
-    #utils_cl.update_W(P, w, W, K, inds, b, B, tol_P = tol_P)
-
-    if update_B :
-        utils_cl.update_B(P, w, W, K, inds, b, B, tol_P = tol_P, minval = 1e-10)
-
+    utils_cl.update_W(P, w, W, K, inds, b, B, tol_P = tol_P)
+    
+    if update_B : utils_cl.update_B(P, w, W, K, inds, b, B, tol_P = tol_P, minval = 1e-10)
+    
     # keep track of log-likelihood values
     a.beta = beta
     a.most_likely_classes.append(np.argmax(P, axis=1))

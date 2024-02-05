@@ -84,7 +84,7 @@ def calculate_LR(K, inds, w, W, b, B, LR, beta, min_val = 1e-10):
     classes    = np.int32(len(my_classes))
     
     # parallelise over d chunks on gpu
-    frames = np.int32(1024)
+    frames = np.int32(5000)
     
     LR_cl = cl.array.zeros(queue, (frames,), dtype = np.float32)
     w_cl  = cl.array.empty(queue, (frames,), dtype = np.float32)
