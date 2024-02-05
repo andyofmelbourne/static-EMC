@@ -59,14 +59,15 @@ print('iterations:', a.iterations)
 for i in range(1):
     # this effectively sets the baseline background scale to 1
     # since b is intitialised to 1
-    if a.iterations == 0 :
+    #if a.iterations == 0 :
+    if i == 0 :
         update_b = False
     else :
         update_b = True
     
     LL, E = utils_cl.calculate_P(K, inds, w, W, b, B, LR, P, beta)
     
-    utils_cl.update_w(P, w, W, b, B, K, inds, tol_P = 1e-3, tol = 1e-5, min_val = 1e-3, update_b = True)
+    utils_cl.update_w(P, w, W, b, B, K, inds, tol_P = 1e-3, tol = 1e-5, min_val = 1e-3, update_b = update_b)
     
     utils_cl.update_W(P, w, W, K, inds, b, B, tol_P = 1e-3, update_B = True)
     
