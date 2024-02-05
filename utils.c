@@ -239,10 +239,69 @@ background[d * I + i] = t / wd;
 
 
 
-// g[t, i] =   sum_d P[d, t] K[d, i] / (W[t, i] + B[d, i] / w[d]) - g0[t]
-// c[t, i] = - sum_d P[d, t] K[d, i] / (W[t, i] + B[d, i] / w[d])**2 - g0[t]
+// g[i] =   sum_d P[d] K[d, i] / (W[i] + sum_l b[d, l] B[l, i] / w[d]) - g0
+// c[i] = - sum_d P[d] K[d, i] / (W[i] + sum_l b[d, l] B[l, i] / w[d])**2 - g0
 
 kernel void update_W(
+global float *P,  
+global unsigned char *K,  
+global float *b,  
+global float *B,  
+global float *w,  
+global float *W,  
+const float c,
+const float minval,
+const int I,
+const int L,
+const int D)
+{   
+
+int i = get_global_id(0);
+
+int d, iters;
+float f, g, T, PK, u, v, xp;
+
+float x      = W[i];
+
+// calculate xmax = sum_d P[d] K[d, i] / sum_d w[d] P[d]
+float maxval = 0.;
+for (d = 0; d < D; d++){ 
+    maxval += P[d] * K[I*d + i] / c ;
+}
+maxval /= c ;
+
+x = clamp(x, minval, maxval);
+
+// optimisation loop 3x 
+for (iters = 0; iters < 3; iters++){
+    // calculate f and g in this notation
+    f = 0.;
+    g = 0.;
+    for (int d = 0; d < D; d++){ 
+        T  = 0. ;
+        for (int l = 0; l < L; l++)
+            T += b[L*d + l] * B[I*l + i] / w[d] ;
+        T += x; 
+        
+        T  = max(T, minval) ;
+        PK = P[d] * K[I * d + i] ;
+        f += PK / T ;
+        g -= PK / (T * T) ;
+    }
+    
+    u  = - f * f / g ;
+    v  = - f / g - x ;
+    xp = u / c - v ;
+    
+    x = clamp(xp, minval, maxval) ;
+}
+
+W[i] = x;
+}
+
+// g[t, i] =   sum_d P[d, t] K[d, i] / (W[t, i] + B[d, i] / w[d]) - g0[t]
+// c[t, i] = - sum_d P[d, t] K[d, i] / (W[t, i] + B[d, i] / w[d])**2 - g0[t]
+kernel void update_W_old(
 global float *P,  
 global unsigned char *K,  
 global int *ds,  

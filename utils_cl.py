@@ -77,7 +77,7 @@ def calculate_LR(K, inds, w, W, b, B, LR, beta, min_val = 1e-10):
     I = np.int32(W.shape[1])
     
     beta = np.float32(beta)
-    print('\nProbability matrix calculation')
+    if rank == 0 : print('\nProbability matrix calculation')
     
     # split classes by rank
     my_classes = list(range(rank, C, size))
@@ -184,40 +184,89 @@ def update_W(P, w, W, K, inds, b, B, tol_P = 1e-2, minval = 1e-10, update_B = Tr
     - do not want to store on gpu
     B[d, i] = b[d, l] B[l, i]
     """
-    # check if things will fit in memory
     C = np.int32(W.shape[0])
     I = np.int32(W.shape[1])
     D = np.int32(w.shape[0])
     L = np.int32(B.shape[0])
         
     minval = np.float32(minval)
+     
+    if rank == 0 :
+        print('\nW-update')
     
-    max_bytes = 10 * 1024**3 
-    bytes = 4 * C * I * 4 + D * I * 1
-    # needed pixel chunks
-    chunks = np.ceil(bytes / max_bytes)
-   
-    print('\nW-update')
-    print('chunks:', chunks)
+    my_classes = list(range(rank, C, size))
     
-    pixels = np.int32(256) 
+    K_dense = np.zeros((D, I), dtype = np.uint8)
+    W_buf   = np.empty((I,), dtype = np.float32)
     
+    K_cl    = cl.array.empty(queue, (D * I,), dtype = np.uint8)
+    P_cl    = cl.array.empty(queue, (D,), dtype = np.float32)
+    w_cl    = cl.array.empty(queue, (D,), dtype = np.float32)
+    b_cl    = cl.array.empty(queue, (L * D,), dtype = np.float32)
+    B_cl    = cl.array.empty(queue, (L * I,), dtype = np.float32)
+    W_cl    = cl.array.empty(queue, (I,), dtype = np.float32)
+    
+    # load background to gpu 
+    cl.enqueue_copy(queue, B_cl.data, B)
+    
+    if rank == 0 :
+        disable = False
+    else :
+        disable = True
+    
+    for c in tqdm(my_classes, desc = 'processing class', disable = disable):
+        # mask low P frames
+        p      = P[:, c]
+        frames = np.where(p > (p.max() * tol_P))[0]
+        Dc     = np.int32(len(frames))
+        Pd     = np.ascontiguousarray(P[frames, c])
+        wd     = np.ascontiguousarray(w[frames])
+        bdl    = np.ascontiguousarray(b[frames])
+        K_dense.fill(0)
+        for i, d in enumerate(frames) :
+            K_dense[i, inds[d]] = K[d]
+        
+        # calculate g0
+        gW = np.float32(np.sum(Pd * wd))
+        
+        # load P
+        cl.enqueue_copy(queue, P_cl.data, Pd[:Dc])
+        
+        # load K
+        cl.enqueue_copy(queue, K_cl.data, K_dense[:Dc])
+        
+        # load w
+        cl.enqueue_copy(queue, w_cl.data, wd)
+        
+        # load W
+        cl.enqueue_copy(queue, W_cl.data, W[c])
+        
+        # load b
+        cl.enqueue_copy(queue, b_cl.data, bdl)
+        
+        #cl_code.update_W(queue, (I,), None, 
+        #            P_cl.data, K_cl.data, b_cl.data, B_cl.data, 
+        #            w_cl.data, W_cl.data, gW, minval, I, L, Dc)
+        
+        cl.enqueue_copy(queue, W_buf, W_cl.data)
+        W[c] = W_buf
+        
+
+def update_W_old():    
     # calculate g0
-    P_cl = cl.array.empty(queue, (D * C,), dtype = np.float32)
+    P_cl = cl.array.empty(queue, (D,), dtype = np.float32)
     w_cl  = cl.array.empty(queue, (D,), dtype = np.float32)
     K_cl  = cl.array.empty(queue, (D * pixels,), dtype = np.uint8)
-    ds_cl = cl.array.empty(queue, (C * D), dtype = np.int32)
-    Ds_cl = cl.array.empty(queue, (C,), dtype = np.int32)
-    W_cl  = cl.array.empty(queue, (C * pixels), dtype = np.float32)
+    W_cl  = cl.array.empty(queue, (pixels,), dtype = np.float32)
     B_cl  = cl.array.empty(queue, (L * pixels), dtype = np.float32)
     b_cl  = cl.array.empty(queue, (L * D), dtype = np.float32)
-
-    gW_cl  = cl.array.empty(queue, (C,), dtype = np.float32)
-    gB_cl  = cl.array.empty(queue, (L,), dtype = np.float32)
-    background_cl  = cl.array.empty(queue, (D * pixels), dtype = np.float32)
-
+    
+    gW_cl = cl.array.empty(queue, (C,), dtype = np.float32)
+    gB_cl = cl.array.empty(queue, (L,), dtype = np.float32)
+    background_cl = cl.array.empty(queue, (D * pixels), dtype = np.float32)
+    
     K_dense = np.zeros((D, pixels,), dtype = np.uint8)
-
+    
     cl.enqueue_copy(queue, P_cl.data, P)
     cl.enqueue_copy(queue, w_cl.data, w)
     cl.enqueue_copy(queue, b_cl.data, b)
@@ -312,36 +361,40 @@ def update_w(P, w, W, b, B, K, inds, tol_P = 1e-3, tol = 1e-5, min_val = 1e-10, 
     I = np.int32(W.shape[1])
     D = np.int32(w.shape[0])
     L = np.int32(B.shape[0])
-
+    
     # each rank processes a sub-set of frames
-    my_frames = list(range(rank, C, size))
+    my_frames = list(range(rank, D, size))
     
     if rank == 0 :
         print('\nupdating fluence estimates')
         disable = False
     else :
         disable = True
-
-    Wsums = np.sum(W[my_frames, :], axis=-1)
-    g0    = np.dot(Wsums, P[my_frames, :])
+    
+    Wsums = np.sum(W, axis=-1)
+    g0    = np.dot(P[my_frames], Wsums)
     Ksums = np.array([np.sum(K[d]) for d in my_frames])
     xmax  = Ksums / g0
     
-    for d in tqdm(my_frames, desc = 'processing frame', disable = disable):
+    if update_b :
+        gb0    = np.sum(B, axis = -1)
+        xmax_b = Ksums[:, None] / gb0[None, :]
+    
+    for j, d in tqdm(enumerate(my_frames), total = len(my_frames), desc = 'processing frame', disable = disable):
         p = P[d] 
         classes    = np.where(p > (p.max() * tol_P))[0]
-        background = np.dot(b[d], B)
-        t, i = np.ix_(classes, inds[d])
+        t, i       = np.ix_(classes, inds[d])
+        
         Wti  = np.ascontiguousarray(W[t, i])
-        Bi   = np.ascontiguousarray(background[i])
+        Bi   = np.dot(b[d], B[:, i]) / Wti
         Pt   = np.ascontiguousarray(P[d][t])
         PK   = np.ascontiguousarray(Pt * K[d])
-        x    = np.clip(w[d], min_val, xmax[d])
-        c    = g0[d]
-    
+        x    = np.clip(w[d], min_val, xmax[j])
+        c    = g0[j]
         
-        for iter in range(3):
-            T = x + Bi / Wti
+        # w update
+        for iter in range(5):
+            T = x + Bi
             f =  np.sum(PK / T)
             g = -np.sum(PK / T**2)
              
@@ -349,15 +402,46 @@ def update_w(P, w, W, b, B, K, inds, tol_P = 1e-3, tol = 1e-5, min_val = 1e-10, 
             v  = - f / g - x 
             xp = u / c - v 
              
-            x = np.clip(xp, min_val, xmax[d]) 
+            x = np.clip(xp, min_val, xmax[j]) 
         
         w[d] = x;
-    
+        
+        # gb[d, l] = sum_t P[d, t] sum_i K[d, i] / (b[d, l] + (w[d] W[t, i] + sum_l'!=l b[d, l'] B[l', i])/B[l, i]) - sum_i B[l, i]
+        # b update
+        if update_b :
+            for l in range(L):
+                ls = [ll for ll in range(L) if ll != l]
+                c = gb0[l]
+                x = np.clip(b[d, l], min_val, xmax_b[d, l])
+                B2i = (w[d] * Wti + np.dot(b[d, ls], B[ls, i])) / B[l, i]
+                  
+                for iter in range(5):
+                    T = x + B2i 
+                    f =  np.sum(PK / T)
+                    g = -np.sum(PK / T**2)
+                     
+                    u  = - f * f / g 
+                    v  = - f / g - x 
+                    xp = u / c - v 
+                     
+                    x = np.clip(xp, min_val, xmax_b[d, l]) 
+                
+                b[d, l] = x;
+        
     # all gather
     w_all = np.empty_like(w)
-    for r in range(rank):
-        rank_frames = list(range(rank, C, size))
-        w_all[rank_frames] = comm.bcast(w[rank_frames], root=rank)
+    for r in range(size):
+        rank_frames = list(range(r, D, size))
+        w_all[rank_frames] = comm.bcast(w[rank_frames], root=r)
     w[:] = w_all
+    
+    # all gather
+    if update_b :
+        b_all = np.empty_like(w)
+        for r in range(size):
+            rank_frames = list(range(r, D, size))
+            b_all[rank_frames, :] = comm.bcast(b[rank_frames, :], root=r)
+        b[:] = b_all
+    
 
 
