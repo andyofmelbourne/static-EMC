@@ -261,7 +261,7 @@ int i = get_global_id(0);
 int d, iters;
 float f, g, T, PK, u, v, xp;
 
-float x      = W[i];
+float x  = W[i];
 
 // calculate xmax = sum_d P[d] K[d, i] / sum_d w[d] P[d]
 float maxval = 0.;
@@ -284,7 +284,7 @@ for (iters = 0; iters < 3; iters++){
         T += x; 
         
         T  = max(T, minval) ;
-        PK = P[d] * K[I * d + i] ;
+        PK = P[d] * K[I*d + i] ;
         f += PK / T ;
         g -= PK / (T * T) ;
     }
@@ -296,7 +296,7 @@ for (iters = 0; iters < 3; iters++){
     x = clamp(xp, minval, maxval) ;
 }
 
-W[i] = x;
+W[i] = maxval;
 }
 
 // g[t, i] =   sum_d P[d, t] K[d, i] / (W[t, i] + B[d, i] / w[d]) - g0[t]

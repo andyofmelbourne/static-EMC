@@ -228,6 +228,7 @@ def update_W(P, w, W, K, inds, b, B, tol_P = 1e-2, minval = 1e-10, update_B = Tr
         
         # calculate g0
         gW = np.float32(np.sum(Pd * wd))
+        print(c, gW)
         
         # load P
         cl.enqueue_copy(queue, P_cl.data, Pd[:Dc])
@@ -244,9 +245,9 @@ def update_W(P, w, W, K, inds, b, B, tol_P = 1e-2, minval = 1e-10, update_B = Tr
         # load b
         cl.enqueue_copy(queue, b_cl.data, bdl)
         
-        #cl_code.update_W(queue, (I,), None, 
-        #            P_cl.data, K_cl.data, b_cl.data, B_cl.data, 
-        #            w_cl.data, W_cl.data, gW, minval, I, L, Dc)
+        cl_code.update_W(queue, (I,), None, 
+                    P_cl.data, K_cl.data, b_cl.data, B_cl.data, 
+                    w_cl.data, W_cl.data, gW, minval, I, L, Dc)
         
         cl.enqueue_copy(queue, W_buf, W_cl.data)
         W[c] = W_buf

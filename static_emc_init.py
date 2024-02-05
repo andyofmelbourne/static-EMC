@@ -3,7 +3,7 @@ import h5py
 from tqdm import tqdm
 import pickle
 
-#np.random.seed(1)
+np.random.seed(1)
 
 class A():
     def __init__(self, C, L, D, I, K, inds, mask, pixel_indices, beta):
