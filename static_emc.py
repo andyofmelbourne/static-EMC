@@ -67,9 +67,9 @@ for i in range(1):
     
     LL, E = utils_cl.calculate_P(K, inds, w, W, b, B, LR, P, beta)
     
-    utils_cl.update_w(P, w, W, b, B, K, inds, tol_P = 1e-3, tol = 1e-5, min_val = 1e-3, update_b = update_b)
+    #utils_cl.update_w(P, w, W, b, B, K, inds, tol_P = 1e-3, tol = 1e-5, min_val = 1e-3, update_b = update_b)
     
-    utils_cl.update_W(P, w, W, K, inds, b, B, tol_P = 1e-3, update_B = True)
+    #utils_cl.update_W(P, w, W, K, inds, b, B, tol_P = 1e-3, update_B = True)
     
     # keep track of log-likelihood values
     a.most_likely_classes.append(np.argmax(P, axis=1))
@@ -80,4 +80,4 @@ for i in range(1):
     #os.system("pdfunite recon_*.pdf recon.pdf")
     
     # save state
-    pickle.dump(a, open('recon.pickle', 'wb'))
+    pickle.dump(a, open('recon_cpu.pickle', 'wb'))
