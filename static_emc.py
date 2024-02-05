@@ -5,6 +5,11 @@ import config as c
 import pickle
 import os
 
+from mpi4py import MPI
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
+
 from static_emc_init import *
 
 import utils_cl
@@ -47,31 +52,29 @@ inds = a.inds
 #KT = a.KT
 #indsT = a.indsT
 
-print('classes:', W.shape[0])
-print('frames:', len(K))
-print('pixels:', W.shape[1])
+if rank == 0 :
+    print('classes    :', W.shape[0])
+    print('frames     :', len(K))
+    print('pixels     :', W.shape[1])
+    print('iterations :', a.iterations)
 
-beta = 0.002
 
-print('iterations:', a.iterations)
-
-#for i in range(c.iters):
-for i in range(1):
-    # this effectively sets the baseline background scale to 1
-    # since b is intitialised to 1
-    #if a.iterations == 0 :
-    if i == 0 :
-        update_b = False
-    else :
-        update_b = True
+for i in range(c.iters):
+    beta = c.betas[i]
+    update_b = c.update_b[i]
+    update_B = c.update_B[i]
+    tol_P = c.tol_P
     
     LL, E = utils_cl.calculate_P(K, inds, w, W, b, B, LR, P, beta)
     
-    utils_cl.update_w(P, w, W, b, B, K, inds, tol_P = 1e-3, tol = 1e-5, min_val = 1e-3, update_b = update_b)
+    utils_cl.update_w(P, w, W, b, B, K, inds, tol_P = tol_P, min_val = 1e-3, update_b = update_b)
     
-    utils_cl.update_W(P, w, W, K, inds, b, B, tol_P = 1e-3, update_B = True)
+    utils_cl.update_W(P, w, W, K, inds, b, B, tol_P = tol_P)
+    
+    if update_B : utils_cl.update_B(P, w, W, K, inds, b, B, tol_P = tol_P, minval = 1e-10)
     
     # keep track of log-likelihood values
+    a.beta = beta
     a.most_likely_classes.append(np.argmax(P, axis=1))
     a.LL.append(LL)
     a.expectation_values.append(E)
@@ -80,4 +83,4 @@ for i in range(1):
     #os.system("pdfunite recon_*.pdf recon.pdf")
     
     # save state
-    pickle.dump(a, open('recon_cpu.pickle', 'wb'))
+    if rank == 0 : pickle.dump(a, open('recon.pickle', 'wb'))

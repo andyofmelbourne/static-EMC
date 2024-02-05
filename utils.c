@@ -1,7 +1,10 @@
 
-// one worker per (class t, frame d) index
-// LR[d, t]   = sum_i (K[i, d] log(T[i, d, t]) - T[i, d, t])
-// T[i, d, t] = w[d] W[i, t] + sum_l b[d, l] B[i, l]
+// this is called once for each class and frame sub-set
+// one worker per frame
+
+// LR[d]   = sum_i (K[i, d] log(T[i, d]) - T[i, d])
+// T[i, d] = w[d] W[i] + sum_l b[d, l] B[l, i]
+
 kernel void calculate_LR_T_dt (
 global float *LR,  
 global unsigned char *K,  
@@ -12,35 +15,31 @@ global float *B,
 const float beta, 
 const int L, 
 const int I, 
-const int D,
-const int C)
+const int D)
 {   
 int d = get_global_id(0);
-int t = get_global_id(1);
 
 float T;
 float LR_local = 0. ;
 
 float wd = w[d];
 
-int i,l;
+int i, l;
 
 for (i=0; i<I; i++){
     // calculate T
-    T = wd * W[C*i + t] ;
-    //T = wd * W[I*t + i] ;
+    T = wd * W[i] ;
     
     // add background
     for (l=0; l<L; l++) 
-        T += b[d * L + l] * B[L*i + l];
-        //T += b[d * L + l] * B[I*l + i];
+        T += b[d * L + l] * B[I*l + i];
     
     LR_local += K[D*i + d] * log(T) - T;
 }
 
 LR_local *= beta ;
 
-LR[d * C + t] += LR_local ;
+LR[d] = LR_local ;
 }
 
 
@@ -240,10 +239,69 @@ background[d * I + i] = t / wd;
 
 
 
-// g[t, i] =   sum_d P[d, t] K[d, i] / (W[t, i] + B[d, i] / w[d]) - g0[t]
-// c[t, i] = - sum_d P[d, t] K[d, i] / (W[t, i] + B[d, i] / w[d])**2 - g0[t]
+// g[i] =   sum_d P[d] K[d, i] / (W[i] + sum_l b[d, l] B[l, i] / w[d]) - g0
+// c[i] = - sum_d P[d] K[d, i] / (W[i] + sum_l b[d, l] B[l, i] / w[d])**2 - g0
 
 kernel void update_W(
+global float *P,  
+global unsigned char *K,  
+global float *b,  
+global float *B,  
+global float *w,  
+global float *W,  
+const float c,
+const float minval,
+const int I,
+const int L,
+const int D)
+{   
+
+int i = get_global_id(0);
+
+int d, iters;
+float f, g, T, PK, u, v, xp;
+
+float x  = W[i];
+
+// calculate xmax = sum_d P[d] K[d, i] / sum_d w[d] P[d]
+float maxval = 0.;
+for (d = 0; d < D; d++){ 
+    maxval += P[d] * K[I*d + i] ;
+}
+maxval /= c ;
+
+x = clamp(x, minval, maxval);
+
+// optimisation loop 3x 
+for (iters = 0; iters < 3; iters++){
+    // calculate f and g in this notation
+    f = 0.;
+    g = 0.;
+    for (int d = 0; d < D; d++){ 
+        T  = 0. ;
+        for (int l = 0; l < L; l++)
+            T += b[L*d + l] * B[I*l + i] / w[d] ;
+        T += x; 
+        
+        T  = max(T, minval) ;
+        PK = P[d] * K[I*d + i] ;
+        f += PK / T ;
+        g -= PK / (T * T) ;
+    }
+    
+    u  = - f * f / g ;
+    v  = - f / g - x ;
+    xp = u / c - v ;
+    
+    x = clamp(xp, minval, maxval) ;
+}
+
+W[i] = x;
+}
+
+// g[t, i] =   sum_d P[d, t] K[d, i] / (W[t, i] + B[d, i] / w[d]) - g0[t]
+// c[t, i] = - sum_d P[d, t] K[d, i] / (W[t, i] + B[d, i] / w[d])**2 - g0[t]
+kernel void update_W_old(
 global float *P,  
 global unsigned char *K,  
 global int *ds,  
@@ -330,12 +388,87 @@ for (d = 0; d < D; d++){
 g_l[l] = c;
 }
 
+// grad[i] = sum_dt P[d, t] K[d, i] / ( B[i] + (w[d] W[t, i] + sum_l'neql b[d, l'] B[l', i]) / b[d]) - g0[l]
+// xmax[i] = sum_dt P[d, t] K[d, i] / g0[l]
+//         = sum_d K[d, i] / g0[l]
+
+kernel void update_B(
+global float *P,  
+global unsigned char *K,  
+global int *ds,  
+global int *Ds,  
+global float *g_l,  
+global float *B,  
+global float *b,  
+global float *W,  
+global float *w,  
+const float minval,
+const int L,
+const int I,
+const int C,
+const int D
+){
+
+int l = get_global_id(0);
+int i = get_global_id(1);
+
+int d, n, t, lp, iters;
+float f, g, T, PK, u, v, xp;
+
+float x      = B[I * l + i];
+
+float c = g_l[t] ;
+
+// calculate xmax 
+float maxval = 0.;
+for (d = 0; d < D; d++){ 
+    maxval += K[I * d + i] / c ;
+}
+
+x = clamp(x, minval, maxval);
+
+// optimisation loop 3x 
+for (iters = 0; iters < 3; iters++){
+    // calculate f and g in this notation
+    f = 0.;
+    g = 0.;
+    // grad[l, i] =  sum_t sum_d K[d, i] P[d, t] / ( B[i] + (w[d] W[t, i] + sum_l'neql b[d, l'] B[l', i]) / b[d]) - g0[l]
+    for (t = 0; t < C; t++){ 
+    for (n = 0; n < Ds[t]; n++){ 
+        // get the n'th relevant frame index for this class
+        d = ds[D * t + n] ;
+        T = 0.;
+        for (lp = 0; lp < L; lp++) {
+            if (lp != l) 
+                T += b[L*d + lp] * B[I * lp + i] ;
+        }
+         
+        T  += w[d] * W[I * t + i] ;
+        T = x + T / b[L * d + l]  ;
+        T  = max(T, minval);
+        PK = P[C * d + t] * K[I * d + i];
+        f += PK / T ;
+        g -= PK / (T * T) ;
+    }}
+    //printf("%.2e %.2e %.2e\n", x, c, f);
+    
+    u  = - f * f / g ;
+    v  = - f / g - x ;
+    xp = u / c - v ;
+    
+    x = clamp(xp, minval, maxval) ;
+}
+
+B[I * l + i] = x;
+
+}
+
 
 // grad[l, i] = sum_dt P[d, t] K[d, i] / ( B[i] + (w[d] W[t, i] + sum_l'neql b[d, l'] B[l', i]) / b[d]) - g0[l]
 // xmax[l, i] = sum_dt P[d, t] K[d, i] / g0[l]
 //            = sum_d K[d, i] / g0[l]
 
-kernel void update_B(
+kernel void update_B_old(
 global float *P,  
 global unsigned char *K,  
 global int *ds,  
