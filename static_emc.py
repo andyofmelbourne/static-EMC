@@ -52,13 +52,14 @@ inds = a.inds
 #KT = a.KT
 #indsT = a.indsT
 
-print('classes:', W.shape[0])
-print('frames:', len(K))
-print('pixels:', W.shape[1])
+if rank == 0 :
+    print('classes    :', W.shape[0])
+    print('frames     :', len(K))
+    print('pixels     :', W.shape[1])
+    print('iterations :', a.iterations)
 
 beta = 0.002
 
-print('iterations:', a.iterations)
 
 
 #for i in range(c.iters):

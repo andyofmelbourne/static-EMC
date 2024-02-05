@@ -248,8 +248,11 @@ def update_W(P, w, W, K, inds, b, B, tol_P = 1e-2, minval = 1e-10, update_B = Tr
                     P_cl.data, K_cl.data, b_cl.data, B_cl.data, 
                     w_cl.data, W_cl.data, gW, minval, I, L, Dc)
         
-        cl.enqueue_copy(queue, W_buf, W_cl.data)
-        W[c] = W_buf
+        cl.enqueue_copy(queue, W[c], W_cl.data)
+    
+    for r in range(size):
+        rank_classes = list(range(r, C, size))
+        W[rank_classes] = comm.bcast(W[rank_classes], root=r)
     
 
 def update_W_old():    
