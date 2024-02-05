@@ -266,7 +266,7 @@ float x  = W[i];
 // calculate xmax = sum_d P[d] K[d, i] / sum_d w[d] P[d]
 float maxval = 0.;
 for (d = 0; d < D; d++){ 
-    maxval += P[d] * K[I*d + i] / c ;
+    maxval += P[d] * K[I*d + i] ;
 }
 maxval /= c ;
 
@@ -296,7 +296,7 @@ for (iters = 0; iters < 3; iters++){
     x = clamp(xp, minval, maxval) ;
 }
 
-W[i] = maxval;
+W[i] = x;
 }
 
 // g[t, i] =   sum_d P[d, t] K[d, i] / (W[t, i] + B[d, i] / w[d]) - g0[t]
