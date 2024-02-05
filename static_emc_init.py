@@ -7,7 +7,7 @@ np.random.seed(1)
 
 class A():
     def __init__(self, C, L, D, I, K, inds, mask, pixel_indices, beta):
-        self.beta = beta
+        self.betas = beta
         self.C = C
         self.L = L
         self.D = D
@@ -93,7 +93,7 @@ def init(c):
     
     print(f'Found {D} frames with {I} unmasked pixels')
             
-    a = A(c.classes, c.background_classes, D, I, K, inds, mask, pixel_indices, c.beta)
+    a = A(c.classes, c.background_classes, D, I, K, inds, mask, pixel_indices, c.betas[0])
     
     # save sparse datasets        
     print('saving reconstruction variables to:', output)

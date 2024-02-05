@@ -110,8 +110,8 @@ def calculate_LR(K, inds, w, W, b, B, LR, beta, min_val = 1e-10):
         for dstart, dstop, dd in tqdm(chunk_csize(D, frames), desc = 'processing frames', leave = False, disable = disable):
             # load transposed photons to gpu 
             K_dense.fill(0)
-            for d in range(dstart, dstop):
-                K_dense[inds[d], d] = K[d]
+            for i, d in enumerate(range(dstart, dstop)):
+                K_dense[inds[d], i] = K[d]
             cl.enqueue_copy(queue, K_cl.data, K_dense)
             
             # load class etc. to gpu
@@ -135,10 +135,11 @@ def calculate_expectation(K, inds, w, W, b, B, LR, P, beta):
 def calculate_P(K, inds, w, W, b, B, LR, P, beta):
     LR.fill(0)
     calculate_LR(K, inds, w, W, b, B, LR, beta)
-
+    
     x = np.zeros_like(LR)
     comm.Allreduce(LR, x, op = MPI.SUM)
     LR[:] = x
+
     
     # calculate log-likelihood before normalisation
     LL = np.sum(LR)
@@ -248,11 +249,11 @@ def update_W(P, w, W, K, inds, b, B, tol_P = 1e-2, minval = 1e-10, update_B = Tr
                     w_cl.data, W_cl.data, gW, minval, I, L, Dc)
         
         cl.enqueue_copy(queue, W[c], W_cl.data)
-
+    
     # all gather
     for r in range(size):
         rank_classes = list(range(r, C, size))
-        W[rank_classes] = comm.bcast(W[rank_classes], root=r)
+        W[rank_classes] = comm.bcast(np.clip(W[rank_classes], minval, None), root=r)
 
 def update_B(P, w, W, K, inds, b, B, tol_P = 1e-2, minval = 1e-10, update_B = True):
     """
@@ -466,7 +467,7 @@ def update_w(P, w, W, b, B, K, inds, tol_P = 1e-3, tol = 1e-5, min_val = 1e-10, 
         PK   = np.ascontiguousarray(Pt * K[d])
         x    = np.clip(w[d], min_val, xmax[j])
         c    = g0[j]
-        
+
         # w update
         for iter in range(5):
             T = x + Bi
