@@ -272,7 +272,7 @@ def update_B(P, w, W, K, inds, b, B, tol_P = 1e-2, minval = 1e-10, update_B = Tr
     
     if rank == 0 : print('\nB-update')
 
-    my_classes = list(range(rank, L, size))
+    my_frames = list(range(rank, D, size))
     
     if rank == 0 :
         disable = False
@@ -290,7 +290,9 @@ def update_B(P, w, W, K, inds, b, B, tol_P = 1e-2, minval = 1e-10, update_B = Tr
     
     g = np.empty((I,), dtype = float)
     f = np.empty((I,), dtype = float)
-    for l in tqdm(my_classes, desc = 'processing class', disable = disable):
+    g_buf = np.empty((I,), dtype = float)
+    f_buf = np.empty((I,), dtype = float)
+    for l in tqdm(range(L), desc = 'processing class', disable = disable):
         # xmax[i]
         xmax = Ksums / bsums[l]
         
@@ -302,10 +304,10 @@ def update_B(P, w, W, K, inds, b, B, tol_P = 1e-2, minval = 1e-10, update_B = Tr
         B2 = B[ls] 
 
         for iter in range(3):
-            g.fill(0)
-            f.fill(0)
+            g_buf.fill(0)
+            f_buf.fill(0)
             # sum over d to calculate g and f
-            for d in range(D):
+            for d in tqdm(my_frames, desc = 'processing frames', disable = disable, leave = False):
                 p  = P[d] 
                 ts = np.where(p > (p.max() * tol_P))[0]
                 t, i = np.ix_(ts, inds[d])
@@ -320,8 +322,13 @@ def update_B(P, w, W, K, inds, b, B, tol_P = 1e-2, minval = 1e-10, update_B = Tr
                 
                 PK = P[d, t] * K[d]
                 
-                f[i]  += np.sum(PK / T,    axis=0)
-                g[i]  -= np.sum(PK / T**2, axis=0)
+                f_buf[i]  += np.sum(PK / T,    axis=0)
+                g_buf[i]  -= np.sum(PK / T**2, axis=0)
+
+            f.fill(0)
+            g.fill(0)
+            comm.Allreduce(f_buf, f, op = MPI.SUM)
+            comm.Allreduce(g_buf, g, op = MPI.SUM)
             
             u  = - f * f / g 
             v  = - f / g - x 
@@ -331,95 +338,7 @@ def update_B(P, w, W, K, inds, b, B, tol_P = 1e-2, minval = 1e-10, update_B = Tr
         
         B[l] = x
     
-    # all gather
-    for r in range(size):
-        rank_classes = list(range(r, L, size))
-        B[rank_classes] = comm.bcast(B[rank_classes], root=r)
             
-
-def update_W_old():    
-    # calculate g0
-    P_cl = cl.array.empty(queue, (D,), dtype = np.float32)
-    w_cl  = cl.array.empty(queue, (D,), dtype = np.float32)
-    K_cl  = cl.array.empty(queue, (D * pixels,), dtype = np.uint8)
-    W_cl  = cl.array.empty(queue, (pixels,), dtype = np.float32)
-    B_cl  = cl.array.empty(queue, (L * pixels), dtype = np.float32)
-    b_cl  = cl.array.empty(queue, (L * D), dtype = np.float32)
-    
-    gW_cl = cl.array.empty(queue, (C,), dtype = np.float32)
-    gB_cl = cl.array.empty(queue, (L,), dtype = np.float32)
-    background_cl = cl.array.empty(queue, (D * pixels), dtype = np.float32)
-    
-    K_dense = np.zeros((D, pixels,), dtype = np.uint8)
-    
-    cl.enqueue_copy(queue, P_cl.data, P)
-    cl.enqueue_copy(queue, w_cl.data, w)
-    cl.enqueue_copy(queue, b_cl.data, b)
-
-    W_buf = np.empty((C, pixels), dtype=W.dtype)
-    B_buf = np.empty((L, pixels), dtype=B.dtype)
-    
-    ds = np.zeros((C, D), dtype = np.int32)
-    Ds = np.zeros((C,), dtype = np.int32)
-    for i in tqdm(range(1), desc='masking low P-value frames'):
-        # generate the frame lookup table 
-        for t in range(C):
-            # good frame P[d, t] > Pmax[t]
-            p = P[:, t] 
-            d = np.where(p > (p.max() * tol_P))[0]
-            ds[t, :d.shape[0]] = d
-            Ds[t] = d.shape[0]
-        
-        cl.enqueue_copy(queue, ds_cl.data, ds)
-        cl.enqueue_copy(queue, Ds_cl.data, Ds)
-    
-    for i in tqdm(range(1), desc='calculating gw[t]'):
-        cl_code.calculate_gW(queue, (C,), None,
-            P_cl.data, w_cl.data, ds_cl.data, Ds_cl.data, 
-            gW_cl.data, C, D)
-
-    for t in tqdm(range(1), desc='calculating gB[l]'):
-        cl_code.calculate_gB(queue, (L,), None,
-            b_cl.data, gB_cl.data, L, D)
-    
-    for istart, istop, di in tqdm(chunk_csize(I, pixels), desc='updating W & B'):
-        # load photons to gpu 
-        K_dense.fill(0)
-        for d in range(D):
-            m = (inds[d] >= istart) * (inds[d] < istop)
-            K_dense[d, inds[d][m] - istart] = K[d][m]
-        cl.enqueue_copy(queue, K_cl.data, K_dense)
-         
-        W_buf[:, :di] = W[:, istart:istop]
-        B_buf[:, :di] = B[:, istart:istop]
-        cl.enqueue_copy(queue, W_cl.data, W_buf)
-        cl.enqueue_copy(queue, B_cl.data, B_buf)
-        
-        cl_code.calculate_background(queue, (D, di), None,
-                B_cl.data, b_cl.data, w_cl.data, background_cl.data, pixels, L, D)
-    
-        cl_code.update_W(queue, (C, di), None, 
-                         P_cl.data, K_cl.data, 
-                         ds_cl.data, Ds_cl.data, gW_cl.data, background_cl.data, 
-                         W_cl.data, w_cl.data, minval, pixels, C, D)
-        
-        cl.enqueue_copy(queue, W_buf, W_cl.data)
-        W[:, istart:istop] = W_buf[:, :di]
-        
-        # now that P and K are on the gpu may as well update background
-        if update_B :
-            cl_code.update_B(queue, (L, di), None, 
-                             P_cl.data, K_cl.data, 
-                             ds_cl.data, Ds_cl.data, gB_cl.data, B_cl.data, b_cl.data,
-                             W_cl.data, w_cl.data, minval, L, pixels, C, D)
-            
-            cl.enqueue_copy(queue, B_buf, B_cl.data)
-            B[:, istart:istop] = B_buf[:, :di]
-    
-    W[:] = np.clip(W, minval, None)
-    B[:] = np.clip(B, minval, None)
-    
-
 def update_w(P, w, W, b, B, K, inds, tol_P = 1e-3, tol = 1e-5, min_val = 1e-10, max_iters=1000, update_b = True):
     """
     gw[d] = sum_t P[d, t] sum_i W[t, i] (K[d, i] / T[i, t, d] - 1)

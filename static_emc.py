@@ -79,8 +79,8 @@ for i in range(c.iters):
     a.LL.append(LL)
     a.expectation_values.append(E)
     a.iterations += 1
-    #utils.plot_iter(a, a.iterations)
-    #os.system("pdfunite recon_*.pdf recon.pdf")
+    utils.plot_iter(a, a.iterations)
+    os.system("pdfunite recon_*.pdf recon.pdf")
     
     # save state
     if rank == 0 : pickle.dump(a, open('recon.pickle', 'wb'))
