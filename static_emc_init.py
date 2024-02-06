@@ -6,7 +6,7 @@ import pickle
 np.random.seed(1)
 
 class A():
-    def __init__(self, C, L, D, I, K, inds, mask, pixel_indices, beta):
+    def __init__(self, C, L, D, I, K, inds, mask, B, pixel_indices, beta):
         self.betas = beta
         self.C = C
         self.L = L
@@ -33,6 +33,9 @@ class A():
         self.b = np.ones((D, L), dtype = np.float32)
         self.W = np.ascontiguousarray(np.random.random((C, I)).astype(np.float32))
         self.B = np.zeros((L, I), dtype = np.float32)
+        
+        if type(B) is not type(None) :
+            self.B[0] = B
 
 def init(c):
     output = 'recon.pickle'
@@ -58,7 +61,7 @@ def init(c):
     K    = []
     inds = []
     inds_f = np.arange(I, dtype = np.int64)
-    print('loading data:', c.mask)
+    print('loading data:', c.data)
     with h5py.File(c.data) as f:
         data = f['entry_1/data_1/data']
         D    = min(data.shape[0], c.max_frames)
@@ -68,6 +71,14 @@ def init(c):
             m = frame > 0 
             K.append(frame[m].copy())
             inds.append(inds_f[m].copy())
+    
+    # load background 
+    if c.background is not None :
+        print('loading background:', c.data)
+        with h5py.File(c.background) as f:
+            B = f['data'][()][mask].ravel()
+    else :
+        B = None
         
     """
     # load transposed data into sparse array
@@ -93,7 +104,7 @@ def init(c):
     
     print(f'Found {D} frames with {I} unmasked pixels')
             
-    a = A(c.classes, c.background_classes, D, I, K, inds, mask, pixel_indices, c.betas[0])
+    a = A(c.classes, c.background_classes, D, I, K, inds, mask, B, pixel_indices, c.betas[0])
     
     # save sparse datasets        
     print('saving reconstruction variables to:', output)

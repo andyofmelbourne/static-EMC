@@ -84,3 +84,4 @@ for i in range(c.iters):
     
     # save state
     if rank == 0 : pickle.dump(a, open('recon.pickle', 'wb'))
+

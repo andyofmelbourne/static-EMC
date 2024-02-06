@@ -316,7 +316,7 @@ def update_B(P, w, W, K, inds, b, B, tol_P = 1e-2, minval = 1e-10, update_B = Tr
                 # could be, since there may be a lot of t's
                 # but I don't plan to update B for large datasets
                 if L > 1 :
-                    T  = x[i] + (w[d] * W[t, i] + np.dot(b2[d], B2[i])) / b[d, l]
+                    T  = x[i] + (w[d] * W[t, i] + np.dot(b2[d], B2[:, inds[d]])) / b[d, l]
                 else :
                     T  = x[i] + (w[d] * W[t, i]) / b[d, l]
                 
@@ -381,7 +381,7 @@ def update_w(P, w, W, b, B, K, inds, tol_P = 1e-3, tol = 1e-5, min_val = 1e-10, 
         t, i       = np.ix_(classes, inds[d])
         
         Wti  = np.ascontiguousarray(W[t, i])
-        Bi   = np.dot(b[d], B[:, i]) / Wti
+        Bi   = np.dot(b[d], B[:, inds[d]]) / Wti
         Pt   = np.ascontiguousarray(P[d][t])
         PK   = np.ascontiguousarray(Pt * K[d])
         x    = np.clip(w[d], min_val, xmax[j])
@@ -409,9 +409,9 @@ def update_w(P, w, W, b, B, K, inds, tol_P = 1e-3, tol = 1e-5, min_val = 1e-10, 
                 c = gb0[l]
                 x = np.clip(b[d, l], min_val, xmax_b[j, l])
                 if L > 1 :
-                    B2i = (w[d] * Wti + np.dot(b[d, ls], B[ls, i])) / B[l, i]
+                    B2i = (w[d] * Wti + np.dot(b[d, ls], B[np.ix_(ls, inds[d])])) / B[l][inds[d]]
                 else :
-                    B2i = w[d] * Wti / B[l, i]
+                    B2i = w[d] * Wti / B[l, inds[d]]
                   
                 for iter in range(5):
                     T = x + B2i 
