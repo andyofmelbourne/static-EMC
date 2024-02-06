@@ -62,15 +62,24 @@ def init(c):
     inds = []
     inds_f = np.arange(I, dtype = np.int64)
     print('loading data:', c.data)
-    with h5py.File(c.data) as f:
-        data = f['entry_1/data_1/data']
-        D    = min(data.shape[0], c.max_frames)
-        
-        for d in tqdm(range(D)):
-            frame = data[d][mask].ravel()
-            m = frame > 0 
-            K.append(frame[m].copy())
-            inds.append(inds_f[m].copy())
+    if type(c.data) is str :
+        fnams = [c.data]
+    else :
+        fnams = c.data
+    
+    frames = 0
+    for fnam in fnams:
+        with h5py.File(fnam) as f:
+            data = f['entry_1/data_1/data']
+            D    = min(data.shape[0], c.max_frames)
+            
+            for d in tqdm(range(D)):
+                frame = data[d][mask].ravel()
+                m = frame > 0 
+                K.append(frame[m].copy())
+                inds.append(inds_f[m].copy())
+        frames += D
+    D = frames
     
     # load background 
     if c.background is not None :
