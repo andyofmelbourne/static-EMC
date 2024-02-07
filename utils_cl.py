@@ -2,6 +2,7 @@ import numpy as np
 import pyopencl as cl
 import pyopencl.array 
 from tqdm import tqdm
+import sys
 
 from mpi4py import MPI
 comm = MPI.COMM_WORLD
@@ -11,10 +12,18 @@ size = comm.Get_size()
 gpu_precision = np.float32
 
 # find an opencl device (preferably a GPU) in one of the available platforms
+done = False
 for p in cl.get_platforms():
     devices = p.get_devices(cl.device_type.GPU)
-    if len(devices) > 0:
+    if (len(devices) > 0) and ('NVIDIA' in p.name):
+        done = True
         break
+
+if not done :
+    for p in cl.get_platforms():
+        devices = p.get_devices(cl.device_type.GPU)
+        if (len(devices) > 0) :
+            break
     
 if len(devices) == 0 :
     for p in cl.get_platforms():
@@ -22,7 +31,10 @@ if len(devices) == 0 :
         if len(devices) > 0:
             break
 
-context = cl.Context(devices[rank % len(devices)])
+print('number of devices:', len(devices))
+print(rank, 'my device:', devices[rank % len(devices)])
+sys.stdout.flush()
+context = cl.Context([devices[rank % len(devices)]])
 queue   = cl.CommandQueue(context)
 
 cl_code = cl.Program(context, open('utils.c', 'r').read()).build()
