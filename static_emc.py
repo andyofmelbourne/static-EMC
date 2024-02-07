@@ -58,6 +58,33 @@ if rank == 0 :
     print('pixels     :', W.shape[1])
     print('iterations :', a.iterations)
 
+class Empty():
+    pass
+
+def save_iteration(a):
+    # save everything except K and inds
+    b = Empty()
+    b = A(a.C, a.L, a.D, a.I, [], [], a.mask, a.B, a.pixel_indices, a.beta)
+    b.C = a.C
+    b.L = a.L
+    b.D = a.D
+    b.I = a.I
+    b.mask = a.mask
+    b.B = a.B
+    b.pixel_indices = a.pixel_indices
+    b.beta = a.beta
+    b.w = a.w
+    b.W = a.W
+    b.b = a.b
+    b.B = a.B
+    b.most_likely_classes = a.most_likely_classes
+    b.expectation_values = a.expectation_values
+    b.LL = a.LL
+    b.iterations = a.iterations
+    b.P = a.P
+    
+    pickle.dump(b, open('recon_%.4d.pickle'%a.iterations, 'wb'))
+    
 
 for i in range(c.iters):
     beta = c.betas[i]
@@ -79,9 +106,10 @@ for i in range(c.iters):
     a.LL.append(LL)
     a.expectation_values.append(E)
     a.iterations += 1
-    utils.plot_iter(a, a.iterations)
-    os.system("pdfunite recon_*.pdf recon.pdf")
+    #utils.plot_iter(a, a.iterations)
+    #os.system("pdfunite recon_*.pdf recon.pdf")
     
     # save state
-    if rank == 0 : pickle.dump(a, open('recon.pickle', 'wb'))
+    #if rank == 0 : pickle.dump(a, open('recon.pickle', 'wb'))
+    if rank == 0 : save_iteration(a)
 
