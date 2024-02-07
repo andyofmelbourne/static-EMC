@@ -31,7 +31,7 @@ class A():
         
         self.w = np.ones((D,), dtype = np.float32)
         self.b = np.ones((D, L), dtype = np.float32)
-        self.W = np.ascontiguousarray(np.random.random((C, I)).astype(np.float32))
+        self.W = 1e-3 + np.ascontiguousarray(np.random.random((C, I)).astype(np.float32))
         self.B = np.zeros((L, I), dtype = np.float32)
         
         if type(B) is not type(None) :

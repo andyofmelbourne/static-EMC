@@ -195,19 +195,20 @@ def update_W(P, w, W, K, inds, b, B, tol_P = 1e-2, minval = 1e-10, update_B = Tr
     if rank == 0 : print('\nW-update')
     
     my_classes = list(range(rank, C, size))
+
+    # chunk over pixels
+    pixels  = np.int32(256)
     
-    K_dense = np.zeros((D, I), dtype = np.uint8)
-    W_buf   = np.empty((I,), dtype = np.float32)
+    K_dense = np.zeros((D, pixels), dtype = np.uint8)
+    W_buf   = np.empty((pixels,), dtype = np.float32)
+    k       = np.empty((I,), dtype = np.uint8)
     
-    K_cl    = cl.array.empty(queue, (D * I,), dtype = np.uint8)
+    K_cl    = cl.array.empty(queue, (D * pixels,), dtype = np.uint8)
     P_cl    = cl.array.empty(queue, (D,), dtype = np.float32)
     w_cl    = cl.array.empty(queue, (D,), dtype = np.float32)
     b_cl    = cl.array.empty(queue, (L * D,), dtype = np.float32)
-    B_cl    = cl.array.empty(queue, (L * I,), dtype = np.float32)
-    W_cl    = cl.array.empty(queue, (I,), dtype = np.float32)
-    
-    # load background to gpu 
-    cl.enqueue_copy(queue, B_cl.data, B)
+    B_cl    = cl.array.empty(queue, (L * pixels,), dtype = np.float32)
+    W_cl    = cl.array.empty(queue, (pixels,), dtype = np.float32)
     
     if rank == 0 :
         disable = False
@@ -222,33 +223,40 @@ def update_W(P, w, W, K, inds, b, B, tol_P = 1e-2, minval = 1e-10, update_B = Tr
         Pd     = np.ascontiguousarray(P[frames, c])
         wd     = np.ascontiguousarray(w[frames])
         bdl    = np.ascontiguousarray(b[frames])
-        K_dense.fill(0)
-        for i, d in enumerate(frames) :
-            K_dense[i, inds[d]] = K[d]
-        
+
         # calculate g0
         gW = np.float32(np.sum(Pd * wd))
         
         # load P
         cl.enqueue_copy(queue, P_cl.data, Pd[:Dc])
         
-        # load K
-        cl.enqueue_copy(queue, K_cl.data, K_dense[:Dc])
-        
         # load w
         cl.enqueue_copy(queue, w_cl.data, wd)
-        
-        # load W
-        cl.enqueue_copy(queue, W_cl.data, W[c])
-        
+
         # load b
         cl.enqueue_copy(queue, b_cl.data, bdl)
-        
-        cl_code.update_W(queue, (I,), None, 
-                    P_cl.data, K_cl.data, b_cl.data, B_cl.data, 
-                    w_cl.data, W_cl.data, gW, minval, I, L, Dc)
-        
-        cl.enqueue_copy(queue, W[c], W_cl.data)
+            
+        for istart, istop, di in tqdm(chunk_csize(I, pixels), desc = 'processing pixels', leave = False, disable = disable):
+            # load K
+            for i, d in enumerate(frames) :
+                k.fill(0)
+                k[inds[d]] = K[d]
+                K_dense[i][:di] = k[istart:istop]
+            
+            cl.enqueue_copy(queue, K_cl.data, K_dense[:Dc])
+            
+            # load background to gpu 
+            cl.enqueue_copy(queue, B_cl.data, np.ascontiguousarray(B[:, istart:istop]))
+            
+            # load W
+            cl.enqueue_copy(queue, W_cl.data, np.ascontiguousarray(W[c, istart:istop]))
+            
+            cl_code.update_W(queue, (di,), None, 
+                        P_cl.data, K_cl.data, b_cl.data, B_cl.data, 
+                        w_cl.data, W_cl.data, gW, minval, pixels, L, Dc)
+            
+            cl.enqueue_copy(queue, W_buf, W_cl.data)
+            W[c, istart:istop] = W_buf[:di]
     
     # all gather
     for r in range(size):
