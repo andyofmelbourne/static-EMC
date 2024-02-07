@@ -2,6 +2,7 @@ import numpy as np
 import pyopencl as cl
 import pyopencl.array 
 from tqdm import tqdm
+import sys
 
 from mpi4py import MPI
 comm = MPI.COMM_WORLD
@@ -11,10 +12,18 @@ size = comm.Get_size()
 gpu_precision = np.float32
 
 # find an opencl device (preferably a GPU) in one of the available platforms
+done = False
 for p in cl.get_platforms():
     devices = p.get_devices(cl.device_type.GPU)
-    if len(devices) > 0:
+    if (len(devices) > 0) and ('NVIDIA' in p.name):
+        done = True
         break
+
+if not done :
+    for p in cl.get_platforms():
+        devices = p.get_devices(cl.device_type.GPU)
+        if (len(devices) > 0) :
+            break
     
 if len(devices) == 0 :
     for p in cl.get_platforms():
@@ -22,22 +31,14 @@ if len(devices) == 0 :
         if len(devices) > 0:
             break
 
-context = cl.Context(devices)
+print('number of devices:', len(devices))
+print(rank, 'my device:', devices[rank % len(devices)])
+sys.stdout.flush()
+context = cl.Context([devices[rank % len(devices)]])
 queue   = cl.CommandQueue(context)
 
 cl_code = cl.Program(context, open('utils.c', 'r').read()).build()
 
-
-# find an opencl device (preferably a CPU) in one of the available platforms
-for p in cl.get_platforms():
-    devices = p.get_devices(cl.device_type.CPU)
-    if len(devices) > 0:
-        break
-
-context_cpu = cl.Context(devices)
-queue_cpu   = cl.CommandQueue(context_cpu)
-
-cl_code_cpu = cl.Program(context_cpu, open('utils.c', 'r').read()).build()
 
 # make an iterator that splits N into chunks of size n
 class chunk_csize:
@@ -84,7 +85,7 @@ def calculate_LR(K, inds, w, W, b, B, LR, beta, min_val = 1e-10):
     classes    = np.int32(len(my_classes))
     
     # parallelise over d chunks on gpu
-    frames = np.int32(5000)
+    frames = np.int32(50000)
     
     LR_cl = cl.array.zeros(queue, (frames,), dtype = np.float32)
     w_cl  = cl.array.empty(queue, (frames,), dtype = np.float32)
