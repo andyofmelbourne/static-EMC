@@ -6,7 +6,7 @@ import pickle
 np.random.seed(1)
 
 class A():
-    def __init__(self, C, L, D, I, K, inds, mask, B, pixel_indices, beta):
+    def __init__(self, C, L, D, I, K, inds, mask, B, pixel_indices, file_index, frame_index, beta):
         self.betas = beta
         self.C = C
         self.L = L
@@ -24,6 +24,8 @@ class A():
         self.iterations = 0
          
         self.pixel_indices = pixel_indices
+        self.file_index = file_index
+        self.frame_index = frame_index
         
         self.LR = np.empty((D, C), dtype = np.float32)
         self.P  = np.zeros((D, C), dtype = np.float32)
@@ -60,6 +62,8 @@ def init(c):
     # load data into sparse array
     K    = []
     inds = []
+    file_index = []
+    frame_index = []
     inds_f = np.arange(I, dtype = np.int64)
     print('loading data:', c.data)
     if type(c.data) is str :
@@ -67,8 +71,7 @@ def init(c):
     else :
         fnams = c.data
     
-    frames = 0
-    for fnam in fnams:
+    for i, fnam in enumerate(fnams):
         with h5py.File(fnam) as f:
             data = f['entry_1/data_1/data']
             D    = min(data.shape[0], c.max_frames)
@@ -76,10 +79,11 @@ def init(c):
             for d in tqdm(range(D)):
                 frame = data[d][mask].ravel()
                 m = frame > 0 
-                K.append(frame[m].copy())
-                inds.append(inds_f[m].copy())
-        frames += D
-    D = frames
+                if np.sum(frame[m]) > 10 :
+                    K.append(frame[m].copy())
+                    inds.append(inds_f[m].copy())
+                    file_index.append(i)
+                    frame_index.append(d)
     
     # load background 
     if c.background is not None :
@@ -111,9 +115,10 @@ def init(c):
             indsT.append(inds_d[m])
     """
     
+    D = len(K)
     print(f'Found {D} frames with {I} unmasked pixels')
             
-    a = A(c.classes, c.background_classes, D, I, K, inds, mask, B, pixel_indices, c.betas[0])
+    a = A(c.classes, c.background_classes, D, I, K, inds, mask, B, pixel_indices, file_index, frame_index, c.betas[0])
     
     # save sparse datasets        
     print('saving reconstruction variables to:', output)

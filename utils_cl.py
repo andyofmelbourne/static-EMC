@@ -198,7 +198,7 @@ def update_W(P, w, W, K, inds, b, B, tol_P = 1e-2, minval = 1e-10, update_B = Tr
     my_classes = list(range(rank, C, size))
 
     # chunk over pixels
-    pixels  = np.int32(256)
+    pixels  = np.int32(2048)
     
     K_dense = np.zeros((D, pixels), dtype = np.uint8)
     W_buf   = np.empty((pixels,), dtype = np.float32)
