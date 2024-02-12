@@ -48,9 +48,7 @@ P = a.P
 K = a.K
 inds = a.inds
 
-# transpose of above KT[i, d]
-#KT = a.KT
-#indsT = a.indsT
+K, inds = pickle.load(open('photons.pickle', 'rb'))
 
 if rank == 0 :
     print('classes    :', W.shape[0])
@@ -64,7 +62,7 @@ class Empty():
 def save_iteration(a):
     # save everything except K and inds
     b = Empty()
-    b = A(a.C, a.L, a.D, a.I, [], [], a.mask, a.B, a.pixel_indices, a.file_index, a.frame_index, a.beta)
+    b = A(a.C, a.L, a.D, a.I, a.mask, a.B, a.pixel_indices, a.file_index, a.frame_index, a.beta)
     b.C = a.C
     b.L = a.L
     b.D = a.D

@@ -6,16 +6,12 @@ import pickle
 np.random.seed(1)
 
 class A():
-    def __init__(self, C, L, D, I, K, inds, mask, B, pixel_indices, file_index, frame_index, beta):
+    def __init__(self, C, L, D, I, mask, B, pixel_indices, file_index, frame_index, beta):
         self.betas = beta
         self.C = C
         self.L = L
         self.D = D
         self.I = I
-        self.K = K
-        self.inds = inds
-        #self.KT = KT
-        #self.indsT = indsT
         self.mask = mask
         
         self.most_likely_classes = []
@@ -41,11 +37,12 @@ class A():
 
 def init(c):
     output = 'recon.pickle'
-
+    output_photons = 'photons.pickle'
+    
     # load mask    
-    print('loading mask:', c.mask)
-    with h5py.File(c.mask) as f:
-        mask0 = f['entry_1/good_pixels'][()]
+    print('loading mask:', c.fnams[0], '/entry_1/instrument_1/detector_1/good_pixels')
+    with h5py.File(c.fnams[0]) as f:
+        mask0 = f['/entry_1/instrument_1/detector_1/good_pixels'][()]
         frame_shape = mask0.shape
         frame_size  = mask0.size
     
@@ -86,43 +83,22 @@ def init(c):
                     frame_index.append(d)
     
     # load background 
-    if c.background is not None :
-        print('loading background:', c.data)
-        with h5py.File(c.background) as f:
-            B = f['data'][()][mask].ravel()
-    else :
-        B = None
-        
-    """
-    # load transposed data into sparse array
-    KT    = []
-    indsT = []
-    
-    # frame indices
-    inds_d = np.arange(D, dtype=np.int64)
-    
-    # un-masked and selected pixel indices
-    inds_i = np.arange(mask.size, dtype = np.int64).reshape(mask.shape)[mask]
-    
-    print('loading transposed data:', c.mask)
-    with h5py.File(c.dataT) as f:
-        data = f['data_id']
-        
-        for i in tqdm(pixel_indices):
-            frame = data[i, :D]
-            m = frame > 0 
-            KT.append(frame[m])
-            indsT.append(inds_d[m])
-    """
+    print('loading background:', c.fnams[0], '/entry_1/instrument_1/detector_1/background')
+    with h5py.File(c.background) as f:
+        B = f['/entry_1/instrument_1/detector_1/background'][()][mask].ravel()
     
     D = len(K)
     print(f'Found {D} frames with {I} unmasked pixels')
             
-    a = A(c.classes, c.background_classes, D, I, K, inds, mask, B, pixel_indices, file_index, frame_index, c.betas[0])
+    a = A(c.classes, c.background_classes, D, I, mask, B, pixel_indices, file_index, frame_index, c.betas[0])
     
     # save sparse datasets        
     print('saving reconstruction variables to:', output)
     pickle.dump(a, open(output, 'wb'))
+
+    print('saving sparse photon counts to:', output_photons)
+    pickle.dump([K, inds], open(output_photons, 'wb'))
+    
 
 if __name__ == '__main__' :
     import config
