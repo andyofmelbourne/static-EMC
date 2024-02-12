@@ -67,6 +67,7 @@ def save_iteration(a):
     b.L = a.L
     b.D = a.D
     b.I = a.I
+    b.frame_shape = a.frame_shape
     b.mask = a.mask
     b.B = a.B
     b.pixel_indices = a.pixel_indices

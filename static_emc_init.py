@@ -6,12 +6,13 @@ import pickle
 np.random.seed(1)
 
 class A():
-    def __init__(self, C, L, D, I, mask, B, pixel_indices, file_index, frame_index, beta):
+    def __init__(self, C, L, D, I, mask, B, pixel_indices, file_index, frame_index, frame_shape, beta):
         self.betas = beta
         self.C = C
         self.L = L
         self.D = D
         self.I = I
+        self.frame_shape = frame_shape
         self.mask = mask
         
         self.most_likely_classes = []
@@ -38,10 +39,15 @@ class A():
 def init(c):
     output = 'recon.pickle'
     output_photons = 'photons.pickle'
+
+    if type(c.data) is str :
+        fnams = [c.data]
+    else :
+        fnams = c.data
     
     # load mask    
-    print('loading mask:', c.fnams[0], '/entry_1/instrument_1/detector_1/good_pixels')
-    with h5py.File(c.fnams[0]) as f:
+    print('loading mask:', fnams[0], '/entry_1/instrument_1/detector_1/good_pixels')
+    with h5py.File(fnams[0]) as f:
         mask0 = f['/entry_1/instrument_1/detector_1/good_pixels'][()]
         frame_shape = mask0.shape
         frame_size  = mask0.size
@@ -63,10 +69,6 @@ def init(c):
     frame_index = []
     inds_f = np.arange(I, dtype = np.int64)
     print('loading data:', c.data)
-    if type(c.data) is str :
-        fnams = [c.data]
-    else :
-        fnams = c.data
     
     for i, fnam in enumerate(fnams):
         with h5py.File(fnam) as f:
@@ -81,16 +83,18 @@ def init(c):
                     inds.append(inds_f[m].copy())
                     file_index.append(i)
                     frame_index.append(d)
+                else :
+                    print('Warning. Frame', d, 'in dataset', fnam, 'has fewer than 10 photon counts in selected pixels')
     
     # load background 
-    print('loading background:', c.fnams[0], '/entry_1/instrument_1/detector_1/background')
-    with h5py.File(c.background) as f:
+    print('loading background:', fnams[0], '/entry_1/instrument_1/detector_1/background')
+    with h5py.File(fnams[0]) as f:
         B = f['/entry_1/instrument_1/detector_1/background'][()][mask].ravel()
     
     D = len(K)
     print(f'Found {D} frames with {I} unmasked pixels')
             
-    a = A(c.classes, c.background_classes, D, I, mask, B, pixel_indices, file_index, frame_index, c.betas[0])
+    a = A(c.classes, c.background_classes, D, I, mask, B, pixel_indices, file_index, frame_index, frame_shape, c.betas[0],)
     
     # save sparse datasets        
     print('saving reconstruction variables to:', output)
