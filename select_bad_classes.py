@@ -7,8 +7,7 @@ import signal
 import os
 import pickle
 from static_emc_init import A
-
-import config as c
+import sys
 
 def get_classes_by_favour(r):
     C      = r.W.shape[0]
@@ -21,7 +20,7 @@ def get_classes_by_favour(r):
     return ts, assemble_classes(r, ts)
 
 def assemble_classes(r, classes):
-    image = np.empty(c.frame_shape, dtype=float)
+    image = np.empty(r.frame_shape, dtype=float)
     ims   = np.zeros((len(classes), 128, 128), dtype=float)
     for i, t in enumerate(classes) :
         image.fill(0)
@@ -106,13 +105,17 @@ class Application:
         if keys_mapping[event.key()] == 'X':
             index, time = self.plot.timeIndex(self.plot.timeLine)
             self.bad[index] = ~self.bad[index]
+            print('setting index:', index, time, 'class:', self.classes[index], 'to', self.bad[index])
             self.timeLineChanged()
         
         # save list of good classes in recon
         elif keys_mapping[event.key()] == 'S':
             out = 'good_classes.pickle'
             print('saving list of good classes to:', out)
-            pickle.dump(~self.bad, open(out, 'wb'))
+            #pickle.dump(~self.bad[np.array(self.classes)], open(out, 'wb'))
+            t = np.zeros_like(self.bad)
+            t[np.array(self.classes)[~self.bad]] = True
+            pickle.dump(t, open(out, 'wb'))
             
         
         """
@@ -156,7 +159,8 @@ class Application:
 
 
 if __name__ == '__main__':
-    fnam = 'recon_0020.pickle'
+    #fnam = 'recon_0020.pickle'
+    fnam = sys.argv[1]
     r = pickle.load(open(fnam, 'rb'))
     ts, ims = get_classes_by_favour(r)
     Application(ts, ims)
