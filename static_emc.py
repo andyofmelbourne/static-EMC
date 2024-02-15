@@ -4,6 +4,7 @@ from tqdm import tqdm
 import config as c
 import pickle
 import os
+import sys
 
 from mpi4py import MPI
 comm = MPI.COMM_WORLD
@@ -41,13 +42,7 @@ LR = a.LR
 # probability matrix P[d, c]
 P = a.P
 
-# transpose of above  PT[c, d]
-#PT = a.PT
-
 # photon counts K[d, i]
-K = a.K
-inds = a.inds
-
 K, inds = pickle.load(open('photons.pickle', 'rb'))
 
 if rank == 0 :
@@ -56,13 +51,10 @@ if rank == 0 :
     print('pixels     :', W.shape[1])
     print('iterations :', a.iterations)
 
-class Empty():
-    pass
 
 def save_iteration(a):
     # save everything except K and inds
-    b = Empty()
-    b = A(a.C, a.L, a.D, a.I, a.mask, a.B, a.pixel_indices, a.file_index, a.frame_index, a.beta)
+    b = A(a.C, a.L, a.D, a.I, a.mask, a.B, a.pixel_indices, a.file_index, a.frame_index, a.frame_shape, a.beta)
     b.C = a.C
     b.L = a.L
     b.D = a.D
@@ -82,7 +74,10 @@ def save_iteration(a):
     b.iterations = a.iterations
     b.P = a.P
     
-    pickle.dump(b, open('recon_%.4d.pickle'%a.iterations, 'wb'))
+    fnam = 'recon_%.4d.pickle'%a.iterations
+    print('writing', fnam)
+    pickle.dump(b, open(fnam, 'wb'))
+    os.system(f"cp {fnam} recon.pickle")
     
 
 for i in range(c.iters):

@@ -15,12 +15,12 @@ pixels             = np.arange(1024**2).reshape(frame_shape)[0, :, :128]
 
 tol_P = 1e-2
 
-iters = 30
+iters = 40
 update_b     = np.ones((iters,), dtype=bool)
 update_b[0]  = False
 update_B     = np.zeros((iters,), dtype=bool)
 beta_start   = 0.001
 beta_stop    = 0.1
-betas = (beta_stop / beta_start)**(np.arange(iters)/(5-1)) * beta_start
+betas = (beta_stop / beta_start)**(np.arange(iters)/(20-1)) * beta_start
 
-
+betas[20:] = beta_stop

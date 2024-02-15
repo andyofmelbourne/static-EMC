@@ -16,7 +16,7 @@ module load exfel exfel-python
 conda activate /home/amorgan/.conda/envs/EMC
 
 python static_emc_init.py
-mpirun -np 32 python static_emc.py
+mpirun -np 16 python static_emc.py
 
 
 
