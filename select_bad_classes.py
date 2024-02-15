@@ -105,7 +105,7 @@ class Application:
         if keys_mapping[event.key()] == 'X':
             index, time = self.plot.timeIndex(self.plot.timeLine)
             self.bad[index] = ~self.bad[index]
-            print('setting index:', index, time, 'class:', self.classes[index], 'to', self.bad[index])
+            print('setting index:', index, time, 'class:', self.classes[index], 'to', ~self.bad[index])
             self.timeLineChanged()
         
         # save list of good classes in recon
@@ -116,6 +116,7 @@ class Application:
             t = np.zeros_like(self.bad)
             t[np.array(self.classes)[~self.bad]] = True
             pickle.dump(t, open(out, 'wb'))
+            print('done')
             
         
         """
