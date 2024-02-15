@@ -123,8 +123,18 @@ def calculate_LR(K, inds, w, W, b, B, LR, beta, min_val = 1e-10):
                     LR_cl.data,  K_cl.data, w_cl.data, W_cl.data,
                     b_cl.data, B_cl.data, beta, L, I, frames)
             
+            sys.stdout.flush()
             cl.enqueue_copy(queue, LR_buf, LR_cl.data)
             LR[dstart: dstop, c] = LR_buf[:dd]
+    
+    # all gather
+    #print('gathering LR')
+    #sys.stdout.flush()
+    for r in range(size):
+        #print(size, rank, r)
+        #sys.stdout.flush()
+        rank_classes = list(range(r, C, size))
+        LR[:, rank_classes] = comm.bcast(LR[:, rank_classes], root=r)
     
 def calculate_expectation(K, inds, w, W, b, B, LR, P, beta):
     calculate_LR(K, inds, w, W, b, B, LR, beta)
@@ -137,9 +147,11 @@ def calculate_P(K, inds, w, W, b, B, LR, P, beta):
     LR.fill(0)
     calculate_LR(K, inds, w, W, b, B, LR, beta)
     
-    x = np.zeros_like(LR)
-    comm.Allreduce(LR, x, op = MPI.SUM)
-    LR[:] = x
+    #print('Allreducing probablility matrix') 
+    #sys.stdout.flush()
+    #x = np.zeros_like(LR)
+    #comm.Allreduce(LR, x, op = MPI.SUM)
+    #LR[:] = x
 
     
     # calculate log-likelihood before normalisation

@@ -141,6 +141,8 @@ def plot_iter(r, iteration = 0):
     ax.set_xlabel("iterations")
     
     plt.savefig(f'recon_{str(iteration-1).zfill(3)}.pdf')
+
+    plt.close(fig)
     
     
 
