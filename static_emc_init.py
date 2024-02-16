@@ -68,23 +68,37 @@ def init(c):
     file_index = []
     frame_index = []
     inds_f = np.arange(I, dtype = np.int64)
-    print('loading data:', c.data)
+    filter_count = 0
+    low_count = 0
     
     for i, fnam in enumerate(fnams):
-        with h5py.File(fnam) as f:
-            data = f['entry_1/data_1/data']
-            D    = min(data.shape[0], c.max_frames)
-            
-            for d in tqdm(range(D)):
-                frame = data[d][mask].ravel()
-                m = frame > 0 
-                if np.sum(frame[m]) > 10 :
-                    K.append(frame[m].copy())
-                    inds.append(inds_f[m].copy())
-                    file_index.append(i)
-                    frame_index.append(d)
+        if len(K) < c.max_frames :
+            with h5py.File(fnam) as f:
+                data = f['entry_1/data_1/data']
+                D    = data.shape[0] 
+                
+                if c.filter_by is not None :
+                    filter = f[c.filter_by][()]
                 else :
-                    print('Warning. Frame', d, 'in dataset', fnam, 'has fewer than 10 photon counts in selected pixels')
+                    filter = np.ones((D,), dtype=bool)
+                
+                for d in tqdm(range(D), desc = f'loading data from {fnam}'):
+                    if filter[d] :
+                        frame = data[d][mask].ravel()
+                        m = frame > 0 
+                        if (np.sum(frame[m])) > 10 :
+                            K.append(frame[m].copy())
+                            inds.append(inds_f[m].copy())
+                            file_index.append(i)
+                            frame_index.append(d)
+                            
+                            if len(K) == c.max_frames :
+                                break
+                        else :
+                            low_count += 1
+                            print('Warning. Frame', d, 'in dataset', fnam, 'has fewer than 10 photon counts in selected pixels')
+                    else :
+                        filter_count += 1
     
     # load background 
     print('loading background:', fnams[0], '/entry_1/instrument_1/detector_1/background')
@@ -93,6 +107,8 @@ def init(c):
     
     D = len(K)
     print(f'Found {D} frames with {I} unmasked pixels')
+    print(f'{low_count} frames were rejected because they had fewer than 10 photon counts in the unmasked pixels')
+    print(f'{filter_count} frames were rejected due to the user defined filter dataset in the cxi files {c.filter_by}')
             
     a = A(c.classes, c.background_classes, D, I, mask, B, pixel_indices, file_index, frame_index, frame_shape, c.betas[0],)
     
