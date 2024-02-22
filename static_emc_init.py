@@ -2,17 +2,20 @@ import numpy as np
 import h5py
 from tqdm import tqdm
 import pickle
+import sys
+import utils
 
 np.random.seed(1)
 
 class A():
-    def __init__(self, C, L, D, I, mask, B, pixel_indices, file_index, frame_index, frame_shape, beta):
+    def __init__(self, C, L, D, I, mask, B, pixel_indices, file_index, frame_index, frame_shape, frame_slice, beta):
         self.betas = beta
         self.C = C
         self.L = L
         self.D = D
         self.I = I
         self.frame_shape = frame_shape
+        self.frame_slice = frame_slice
         self.mask = mask
         
         self.most_likely_classes = []
@@ -79,26 +82,29 @@ def init(c):
                 
                 if c.filter_by is not None :
                     filter = f[c.filter_by][()]
+                    filter_value = c.filter_value
+                    print(f'using filter {c.filter_by} with filter value {c.filter_value}')
+                    print(f'found {np.sum(filter == filter_value)} events')
                 else :
                     filter = np.ones((D,), dtype=bool)
+                    filter_value = True
                 
-                for d in tqdm(range(D), desc = f'loading data from {fnam}'):
-                    if filter[d] :
-                        frame = data[d][mask].ravel()
-                        m = frame > 0 
-                        if (np.sum(frame[m])) > 10 :
-                            K.append(frame[m].copy())
-                            inds.append(inds_f[m].copy())
-                            file_index.append(i)
-                            frame_index.append(d)
-                            
-                            if len(K) == c.max_frames :
-                                break
-                        else :
-                            low_count += 1
-                            print('Warning. Frame', d, 'in dataset', fnam, 'has fewer than 10 photon counts in selected pixels')
+                ds = np.where(filter == c.filter_value)[0]
+                filter_count += D - len(ds)
+                for d in tqdm(ds, desc = f'loading data from {fnam}'):
+                    frame = data[d][mask].ravel()
+                    m = frame > 0 
+                    if (np.sum(frame[m])) > 10 :
+                        K.append(frame[m].copy())
+                        inds.append(inds_f[m].copy())
+                        file_index.append(i)
+                        frame_index.append(d)
+                        
+                        if len(K) == c.max_frames :
+                            break
                     else :
-                        filter_count += 1
+                        low_count += 1
+                        print('Warning. Frame', d, 'in dataset', fnam, 'has fewer than 10 photon counts in selected pixels')
     
     # load background 
     print('loading background:', fnams[0], '/entry_1/instrument_1/detector_1/background')
@@ -110,7 +116,7 @@ def init(c):
     print(f'{low_count} frames were rejected because they had fewer than 10 photon counts in the unmasked pixels')
     print(f'{filter_count} frames were rejected due to the user defined filter dataset in the cxi files {c.filter_by}')
             
-    a = A(c.classes, c.background_classes, D, I, mask, B, pixel_indices, file_index, frame_index, frame_shape, c.betas[0],)
+    a = A(c.classes, c.background_classes, D, I, mask, B, pixel_indices, file_index, frame_index, frame_shape, c.frame_slice, c.betas[0],)
     
     # save sparse datasets        
     print('saving reconstruction variables to:', output)
@@ -121,5 +127,5 @@ def init(c):
     
 
 if __name__ == '__main__' :
-    import config
+    config = utils.load_config(sys.argv[1])
     init(config)

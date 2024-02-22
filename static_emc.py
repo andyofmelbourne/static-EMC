@@ -1,10 +1,11 @@
 import numpy as np
 import h5py
 from tqdm import tqdm
-import config as c
 import pickle
 import os
 import sys
+import importlib
+import runpy
 
 from mpi4py import MPI
 comm = MPI.COMM_WORLD
@@ -15,6 +16,9 @@ from static_emc_init import *
 
 import utils_cl
 import utils
+
+# load user defined config.py file
+c = utils.load_config(sys.argv[1])
 
 # load recon data 
 a = pickle.load(open('recon.pickle', 'rb'))
@@ -54,7 +58,7 @@ if rank == 0 :
 
 def save_iteration(a):
     # save everything except K and inds
-    b = A(a.C, a.L, a.D, a.I, a.mask, a.B, a.pixel_indices, a.file_index, a.frame_index, a.frame_shape, a.beta)
+    b = A(a.C, a.L, a.D, a.I, a.mask, a.B, a.pixel_indices, a.file_index, a.frame_index, a.frame_shape, a.frame_slice, a.beta)
     b.C = a.C
     b.L = a.L
     b.D = a.D

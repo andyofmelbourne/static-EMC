@@ -273,7 +273,7 @@ maxval /= c ;
 x = clamp(x, minval, maxval);
 
 // optimisation loop 3x 
-for (iters = 0; iters < 3; iters++){
+for (iters = 0; iters < 5; iters++){
     // calculate f and g in this notation
     f = 0.;
     g = 0.;
@@ -671,7 +671,7 @@ maxval /= c ;
 x = clamp(x, minval, maxval);
 
 // optimisation loop 3x 
-for (iters = 0; iters < 3; iters++){
+for (iters = 0; iters < 5; iters++){
     // calculate f and g in this notation
     f = 0.;
     g = 0.;

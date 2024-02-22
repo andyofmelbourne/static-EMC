@@ -3,6 +3,7 @@ import pyopencl as cl
 import pyopencl.array 
 from tqdm import tqdm
 import sys
+import pathlib
 
 from mpi4py import MPI
 comm = MPI.COMM_WORLD
@@ -37,7 +38,8 @@ sys.stdout.flush()
 context = cl.Context([devices[rank % len(devices)]])
 queue   = cl.CommandQueue(context)
 
-cl_code = cl.Program(context, open('utils.c', 'r').read()).build()
+code = pathlib.Path(__file__).resolve().parent.joinpath('utils.c')
+cl_code = cl.Program(context, open(code, 'r').read()).build()
 
 
 # make an iterator that splits N into chunks of size n

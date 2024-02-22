@@ -1,11 +1,28 @@
 from tqdm import tqdm
 import numpy as np
 import time
+import runpy
+import pathlib
 
-import config as c
+class Struct:
+    def __init__(self, **entries):
+        self.__dict__.update(entries)
+
+def load_config(path):
+    p = pathlib.Path(path)
+    
+    print(p.absolute())
+    
+    # returns a dict
+    config = runpy.run_path(str(p.absolute()))
+    
+    # convert to object (like import config)
+    config = Struct(**config)
+    return config
+    
 
 
-def plot_iter(r, iteration = 0):
+def plot_iter(c, r, iteration = 0):
     """
     | P-matrix |
     | lines P  |
@@ -103,7 +120,7 @@ def plot_iter(r, iteration = 0):
             ax = ax_dict[k]
             image.fill(0)
             image.ravel()[r.pixel_indices] = classes[i][j]
-            ax.imshow(image[0, :128, :128]**0.2, origin='lower')
+            ax.imshow(c.imshow(image)**0.2, origin='lower')
             ax.axis('off')
             ax.set_title(f'class {labels[i][j]} no. of frames {round(fav[i][j])}', fontsize=5)
 
@@ -123,7 +140,7 @@ def plot_iter(r, iteration = 0):
         ax = ax_dict[label]
         image.fill(0)
         image.ravel()[r.pixel_indices] = r.B[l]
-        ax.imshow(image[0, :128, :128]**0.2, origin='lower')
+        ax.imshow(c.imshow(image)**0.2, origin='lower')
         ax.axis('off')
         ax.set_title(f'B-class {l}')
     
