@@ -28,11 +28,11 @@ with h5py.File(config.data[0]) as f:
     good_classes = f['static_emc/good_classes'][()]
 
 # load photons
-print('loading photons from photons.pickle')
-K, inds = pickle.load(open('photons.pickle', 'rb'))
+print('loading photons:', sys.argv[2])
+K, inds = pickle.load(open(sys.argv[2], 'rb'))
 
 # load recon file
-print('loading reconstruction file:', sys.argv[2])
+print('loading reconstruction file:', sys.argv[3])
 r = pickle.load(open(sys.argv[2], 'rb'))
 
 I  = r.I
