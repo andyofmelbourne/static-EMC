@@ -15,9 +15,10 @@ source /etc/profile.d/modules.sh
 module load exfel exfel-python
 conda activate /home/amorgan/.conda/envs/EMC
 
-python static_emc_init.py
-mpirun -np 16 python static_emc.py
+python static_emc_init.py config_gold_maxwell.py
 
-python plot_iters.py config.py
+mpirun -np 16 python static_emc.py config_gold_maxwell.py
+
+python plot_iters.py config_gold_maxwell.py
 
 
