@@ -89,7 +89,7 @@ def init(c):
                     filter = np.ones((D,), dtype=bool)
                     filter_value = True
                 
-                ds = np.where(filter == c.filter_value)[0]
+                ds = np.where(filter == filter_value)[0]
                 filter_count += D - len(ds)
                 for d in tqdm(ds, desc = f'loading data from {fnam}'):
                     frame = data[d][mask].ravel()
