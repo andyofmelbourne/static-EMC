@@ -9,6 +9,7 @@ for i in range(87, 96):
 classes            = 200
 background_classes = 1
 max_frames         = 5000
+frame_shape        = (16, 128, 512)
 frame_slice        = np.s_[0, :, :128]
 imshow             = lambda x: x[frame_slice]
 # just use the first part of the first panel (low q)
