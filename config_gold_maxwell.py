@@ -13,6 +13,8 @@ frame_shape        = (16, 128, 512)
 imshow             = lambda x: x[0, :, :128]
 # just use the first part of the first panel (low q)
 pixels             = imshow(np.arange(1024**2).reshape(frame_shape))
+filter_by          = None
+filter_value       = None
 
 tol_P = 1e-2
 
