@@ -9,7 +9,8 @@ recon = sys.argv[1]
 r = pickle.load(open(recon, 'rb'))
 
 # load list of good classes
-good_classes = pickle.load(open('good_classes.pickle', 'rb'))
+gc = sys.argv[2]
+good_classes = pickle.load(open(gc, 'rb'))
 
 # get frames that have good classes as their most favoured class
 good_frames = good_classes[r.most_likely_classes[-1]]
