@@ -33,7 +33,7 @@ K, inds = pickle.load(open(sys.argv[2], 'rb'))
 
 # load recon file
 print('loading reconstruction file:', sys.argv[3])
-r = pickle.load(open(sys.argv[2], 'rb'))
+r = pickle.load(open(sys.argv[3], 'rb'))
 
 I  = r.I
 T  = np.empty((I,), dtype = float)
@@ -96,8 +96,8 @@ for class_index, good_class in tqdm(enumerate(good_classes), total=len(good_clas
     
     if gui_check :
         # make 2d frames
-        image   = np.empty(r.frame_shape, dtype=float)
-        imshape = image[r.frame_slice].shape
+        image   = np.empty(config.frame_shape, dtype=float)
+        imshape = image[config.frame_slice].shape
         frames  = np.zeros((len(ds),) + imshape, dtype=np.float32)
         
         for i, d in enumerate(ds):
@@ -107,7 +107,7 @@ for class_index, good_class in tqdm(enumerate(good_classes), total=len(good_clas
             k[inds[d]] = K[d]
             
             image.ravel()[r.pixel_indices] = k
-            frames[i] = image[r.frame_slice] 
+            frames[i] = image[config.frame_slice] 
 
         fig, ax = plt.subplots()
         color = ['r' if bad_frames[d] else 'b' for d in range(len(bad_frames))]
