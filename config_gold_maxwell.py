@@ -10,8 +10,9 @@ classes            = 1000
 background_classes = 1
 max_frames         = 1000000
 frame_shape        = (16, 128, 512)
+imshow             = lambda x: x[0, :, :128]
 # just use the first part of the first panel (low q)
-pixels             = np.arange(1024**2).reshape(frame_shape)[0, :, :128]
+pixels             = imshow(np.arange(1024**2).reshape(frame_shape))
 
 tol_P = 1e-2
 
