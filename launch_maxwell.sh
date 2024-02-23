@@ -18,6 +18,6 @@ conda activate /home/amorgan/.conda/envs/EMC
 python static_emc_init.py
 mpirun -np 16 python static_emc.py
 
-
+python plot_iters.py config.py
 
 
